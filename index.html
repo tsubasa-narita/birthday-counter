@@ -36,27 +36,131 @@
         </div>
         <h1 id="countdownTitle">3さいのおたんじょうびへ<br /><span>しゅっぱつ しんこう！</span></h1>
 
-        <div class="journey" id="journey" aria-label="お誕生日までの線路">
-          <div class="journey-labels">
-            <span>7がつの スタート</span>
-            <span>🎂 おたんじょうび</span>
+        <div class="journey" id="journey" aria-label="お誕生日駅までの路線図">
+          <div class="route-summary">
+            <span class="route-name">たんじょうびえき まで</span>
+            <strong class="route-remaining" id="routeRemaining">あと 14 えき</strong>
           </div>
-          <div class="track" id="track" role="progressbar" aria-label="お誕生日までの道のり" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
-            <div class="track-fill" id="trackFill"></div>
-            <div class="mini-train" id="miniTrain" aria-hidden="true">🚂</div>
+          <div class="route-line">
+            <div class="route-rail" id="track" role="progressbar" aria-label="お誕生日駅までの道のり" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+              <div class="route-traveled" id="trackFill"></div>
+              <span class="route-stop route-stop--1" aria-hidden="true"></span>
+              <span class="route-stop route-stop--2" aria-hidden="true"></span>
+              <span class="route-stop route-stop--3" aria-hidden="true"></span>
+            <div class="mini-train" id="miniTrain" aria-hidden="true">
+              <span class="current-bubble">いま</span>
+              <span>🚃</span>
+            </div>
+            </div>
+            <div class="birthday-station" aria-hidden="true">
+              <span class="station-roof"></span>
+              <span class="station-body">🎂</span>
+            </div>
           </div>
-          <p class="journey-note" id="journeyNote">きょうも ひとつ えきに ついたよ！</p>
+          <div class="route-labels" aria-hidden="true">
+            <span>スタート</span>
+            <span>8がつ2にち</span>
+          </div>
+          <p class="journey-note" id="journeyNote">ボタンを おすと 1にち すすむよ！</p>
         </div>
 
         <button class="depart-button" id="departButton" type="button">
-          <span class="button-icon" aria-hidden="true">♪</span>
-          <span id="buttonLabel">きてきを ならす</span>
+          <span class="button-icon" aria-hidden="true">▶</span>
+          <span id="buttonLabel">でんしゃを はしらせる！</span>
         </button>
+        <p class="train-variety" aria-label="3種類の電車が登場します">
+          <span class="variety-dot variety-dot--green"></span>
+          <span class="variety-dot variety-dot--red"></span>
+          <span class="variety-dot variety-dot--yellow"></span>
+          どの でんしゃが くるかな？
+        </p>
       </section>
 
-      <p class="footer-note">まいにち ひとつずつ、おおきくなるね</p>
+      <p class="footer-note">まいにち ボタンをおして、たんじょうびえきへ！</p>
       <div class="confetti" id="confetti" aria-hidden="true"></div>
     </main>
+
+    <section class="journey-show" id="journeyShow" role="dialog" aria-modal="true" aria-labelledby="showTitle" hidden>
+      <div class="show-sky" aria-hidden="true">
+        <span class="show-sun"></span>
+        <span class="show-cloud show-cloud--1"></span>
+        <span class="show-cloud show-cloud--2"></span>
+        <span class="show-hill show-hill--back"></span>
+        <span class="show-hill show-hill--front"></span>
+        <div class="speed-lines" id="speedLines"></div>
+        <div class="show-sparkles" id="showSparkles"></div>
+      </div>
+
+      <button class="show-close" id="showClose" type="button" aria-label="アニメーションを閉じる">×</button>
+
+      <header class="show-header">
+        <p class="show-kicker">きょうの でんしゃ</p>
+        <h2 id="showTitle">みどりの わっかでんしゃ</h2>
+        <div class="show-countdown" aria-live="assertive">
+          <span id="showCountLabel">きのうは あと</span>
+          <strong id="showDaysNumber">15</strong>
+          <span id="showCountUnit">にち</span>
+        </div>
+      </header>
+
+      <div class="show-world" aria-hidden="true">
+        <div class="show-station">
+          <div class="show-station-flag">★</div>
+          <div class="show-station-roof"></div>
+          <div class="show-station-building">
+            <span>🎂</span>
+            <b>GOAL</b>
+          </div>
+        </div>
+
+        <div class="show-track">
+          <span class="show-rail show-rail--top"></span>
+          <span class="show-rail show-rail--bottom"></span>
+        </div>
+
+        <div class="show-train" id="showTrain">
+          <span class="train-light"></span>
+          <div class="show-car show-car--front">
+            <span class="train-window train-window--front"></span>
+            <span class="train-window train-window--side"></span>
+            <span class="train-door"></span>
+            <span class="train-stripe"></span>
+            <span class="train-wheel train-wheel--1"></span>
+            <span class="train-wheel train-wheel--2"></span>
+          </div>
+          <div class="show-car show-car--middle">
+            <span class="train-window train-window--1"></span>
+            <span class="train-window train-window--2"></span>
+            <span class="train-door"></span>
+            <span class="train-stripe"></span>
+            <span class="train-wheel train-wheel--1"></span>
+            <span class="train-wheel train-wheel--2"></span>
+          </div>
+          <div class="show-car show-car--last">
+            <span class="train-window train-window--1"></span>
+            <span class="train-window train-window--2"></span>
+            <span class="train-stripe"></span>
+            <span class="train-wheel train-wheel--1"></span>
+            <span class="train-wheel train-wheel--2"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrival-burst" id="arrivalBurst" aria-hidden="true">
+        <span>★</span><span>●</span><span>★</span><span>●</span><span>★</span><span>●</span>
+      </div>
+
+      <div class="arrival-card" id="arrivalCard" aria-live="assertive" aria-hidden="true" inert hidden>
+        <p>たんじょうびえき まで</p>
+        <strong><span>あと</span> <b id="arrivalDays">14</b> <span>にち！</span></strong>
+        <p class="arrival-message" id="arrivalMessage">きょうの 1にちを はこんだよ！</p>
+        <div class="arrival-actions">
+          <button class="replay-button" id="replayButton" type="button" disabled>↻ べつの でんしゃ</button>
+          <button class="return-button" id="returnButton" type="button" disabled>できた！</button>
+        </div>
+      </div>
+    </section>
+
     <script src="app.js"></script>
   </body>
 </html>
