@@ -4,15 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f8cd57" />
-    <meta name="description" content="8月2日の3歳のお誕生日まで、たんじょうび号と一緒に毎日を数えるカウントダウンアプリです。" />
+    <meta name="description" content="8月2日のお誕生日まで、たんじょうび号と一緒に毎日を数えるカウントダウンアプリです。" />
     <title>たんじょうび号｜8月2日まであと何日？</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="assets/birthday-train.webp" as="image" type="image/webp" />
+    <link rel="preload" href="assets/birthday-train.webp" as="image" type="image/webp" media="(min-width: 721px)" />
+    <link rel="preload" href="assets/birthday-train-mobile.webp" as="image" type="image/webp" media="(max-width: 720px)" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app" id="app">
-      <img class="hero-art" src="assets/birthday-train.webp" alt="お花畑を走って、お誕生日の駅へ向かう青い蒸気機関車" />
+      <picture class="hero-picture">
+        <source media="(max-width: 720px)" srcset="assets/birthday-train-mobile.webp" />
+        <img class="hero-art" src="assets/birthday-train.webp" alt="お花畑を走って、お誕生日の駅へ向かう青い蒸気機関車" />
+      </picture>
       <div class="sky-glow" aria-hidden="true"></div>
 
       <header class="topbar">
@@ -34,10 +38,10 @@
 
         <div class="journey" id="journey" aria-label="お誕生日までの線路">
           <div class="journey-labels">
-            <span>きょう</span>
+            <span>7がつの スタート</span>
             <span>🎂 おたんじょうび</span>
           </div>
-          <div class="track">
+          <div class="track" id="track" role="progressbar" aria-label="お誕生日までの道のり" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
             <div class="track-fill" id="trackFill"></div>
             <div class="mini-train" id="miniTrain" aria-hidden="true">🚂</div>
           </div>

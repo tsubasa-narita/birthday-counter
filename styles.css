@@ -1,8 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800;900&display=swap');
-
 :root {
   color-scheme: light;
-  font-family: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif;
+  font-family: ui-rounded, 'Hiragino Maru Gothic ProN', 'Yu Gothic', sans-serif;
   --navy: #103b55;
   --blue: #087cac;
   --cream: #fffaf0;
@@ -26,19 +24,27 @@ button { font: inherit; }
 .app {
   position: relative;
   isolation: isolate;
+  min-height: 100vh;
   min-height: 100svh;
   overflow: hidden;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   padding: max(18px, env(safe-area-inset-top)) clamp(18px, 4vw, 56px) max(16px, env(safe-area-inset-bottom));
 }
 
-.hero-art {
+.hero-picture {
   position: absolute;
   z-index: -3;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.hero-art {
+  width: 100%;
+  height: 100%;
+  display: block;
   object-fit: cover;
   object-position: 53% center;
   filter: saturate(.96);
@@ -100,6 +106,8 @@ button { font: inherit; }
 .countdown-card {
   align-self: center;
   width: min(510px, 100%);
+  min-width: 0;
+  max-width: 100%;
   margin: 28px max(0px, calc((100vw - 1180px) / 2)) 20px auto;
   padding: clamp(24px, 4vw, 38px);
   border: 2px solid rgba(255,255,255,.82);
@@ -165,8 +173,10 @@ h1 span { color: var(--blue); }
   margin-bottom: 11px;
   font-size: 12px;
   font-weight: 900;
-  color: #668075;
+  color: #4c675d;
 }
+
+.journey-labels span { min-width: 0; }
 
 .track {
   position: relative;
@@ -209,7 +219,7 @@ h1 span { color: var(--blue); }
   margin-top: 16px;
   border: 0;
   border-radius: 19px;
-  background: linear-gradient(180deg, #1497c5, #0878a6);
+  background: linear-gradient(180deg, #087aa8, #05658c);
   color: #fff;
   box-shadow: 0 7px 0 #075878, 0 12px 20px rgba(5,95,132,.22);
   cursor: pointer;
@@ -240,6 +250,15 @@ h1 span { color: var(--blue); }
 .app.toot .countdown-card { animation: card-bounce .65s ease; }
 .app.toot .mini-train { animation: train-toot .75s ease; }
 
+.countdown.is-birthday .count-prefix,
+.countdown.is-birthday .count-unit { display: none; }
+
+.countdown.is-birthday .count-number {
+  margin-block: 16px 10px;
+  font-size: clamp(62px, 9vw, 84px);
+  letter-spacing: -.04em;
+}
+
 .confetti-piece {
   position: fixed;
   z-index: 10;
@@ -256,15 +275,26 @@ h1 span { color: var(--blue); }
 
 @media (max-width: 720px) {
   .app { padding-inline: 14px; }
-  .hero-art { object-position: 57% center; }
+  .hero-art { object-position: center top; }
   .sky-glow { background: linear-gradient(180deg, rgba(255,248,224,.82) 0%, rgba(255,248,224,.3) 40%, rgba(16,59,85,.22) 100%); }
   .topbar { align-items: flex-start; }
   .brand { flex: 0 0 auto; gap: 6px; padding: 6px 10px 6px 6px; font-size: 14px; }
   .brand-mark { width: 34px; height: 34px; font-size: 19px; }
   .date-chip { padding: 8px 10px; font-size: 11px; white-space: nowrap; }
-  .countdown-card { align-self: end; margin: 82px auto 10px; padding: 22px 19px; border-radius: 30px; }
+  .countdown-card { align-self: end; width: calc(100vw - 28px); margin: 82px auto 10px; padding: 22px 19px; border-radius: 30px; }
   .count-number { font-size: clamp(80px, 26vw, 112px); }
+  .countdown.is-long-count .count-number { font-size: clamp(58px, 18vw, 80px); }
+  .countdown.is-birthday .count-number { font-size: clamp(54px, 16vw, 68px); }
   h1 { margin-bottom: 18px; }
+}
+
+@media (max-width: 720px) and (max-height: 700px) {
+  .countdown-card { margin-top: 34px; padding: 17px 16px; }
+  .count-number { font-size: clamp(68px, 22vw, 88px); }
+  h1 { margin: 5px 0 12px; font-size: 18px; }
+  .journey { padding-block: 9px; }
+  .depart-button { min-height: 52px; margin-top: 12px; }
+  .footer-note { display: none; }
 }
 
 @media (max-height: 700px) and (min-width: 721px) {
