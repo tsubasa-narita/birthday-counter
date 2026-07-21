@@ -100,8 +100,9 @@ const soundLabel = required<HTMLElement>('#soundLabel');
 const queryMotion = query.get('motion');
 const motionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
 const reducedMotion = queryMotion === 'reduce' || (queryMotion !== 'full' && motionMedia.matches);
-const today = parsePreviewDate() ?? japanDateFromInstant();
-const countdown = calculateCountdown(today);
+const previewDate = parsePreviewDate();
+let today = previewDate ?? japanDateFromInstant();
+let countdown = calculateCountdown(today);
 const audio = new JourneyAudio();
 const savedSound = safeStorageGet(SOUND_KEY) !== '0';
 audio.setEnabled(savedSound);
@@ -174,6 +175,22 @@ function setStatus(text: string): void {
   journeyStatus.textContent = text;
 }
 
+function updateTodayMeta(): void {
+  todayMeta.textContent = `きょう ${countdown.today.month}がつ${countdown.today.day}にち ・ ${countdown.birthdayAge}さいへ`;
+}
+
+function refreshJapanDay(): boolean {
+  if (previewDate) return false;
+  const freshToday = japanDateFromInstant();
+  if (dateKey(freshToday) === dateKey(today)) return false;
+  today = freshToday;
+  countdown = calculateCountdown(today);
+  updateTodayMeta();
+  preparePlan(createRidePlan(countdown, parseRideMemory(safeStorageGet(RIDE_KEY))));
+  setStatus('あたらしい きょうの えきへ しゅっぱつできるよ');
+  return true;
+}
+
 function completeJourney(): void {
   experienceState = 'arriving';
   app.dataset.experienceState = experienceState;
@@ -224,6 +241,7 @@ function updatePassStations(progressValue: number, lastIndex: { value: number })
 
 async function runJourney(): Promise<void> {
   if (experienceState === 'running' || experienceState === 'arriving') return;
+  refreshJapanDay();
   if (arrivalTimer !== null) {
     window.clearTimeout(arrivalTimer);
     arrivalTimer = null;
@@ -322,7 +340,7 @@ function restAtStation(): void {
   departButton.focus({ preventScroll: true });
 }
 
-todayMeta.textContent = `きょう ${countdown.today.month}がつ${countdown.today.day}にち ・ ${countdown.birthdayAge}さいへ`;
+updateTodayMeta();
 preparePlan(currentPlan);
 const scenePreview = Number(query.get('scene'));
 if (query.has('scene') && Number.isFinite(scenePreview) && scenePreview >= 0 && scenePreview <= 1) {
@@ -372,9 +390,12 @@ soundToggle.addEventListener('click', () => {
 
 window.addEventListener('resize', () => world?.resize(), { passive: true });
 document.addEventListener('visibilitychange', () => {
-  if (!activeTimeline) return;
-  if (document.hidden) activeTimeline.pause();
-  else if (experienceState === 'running') activeTimeline.resume();
+  if (document.hidden) {
+    activeTimeline?.pause();
+    return;
+  }
+  if (experienceState === 'running') activeTimeline?.resume();
+  else if (experienceState === 'ready') refreshJapanDay();
 });
 window.addEventListener('beforeunload', () => {
   activeTimeline?.kill();

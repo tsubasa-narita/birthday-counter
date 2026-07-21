@@ -81,11 +81,13 @@ function isRideMemory(value: unknown): value is RideMemory {
   return typeof candidate.riddenDate === 'string'
     && parseDateKey(candidate.riddenDate) !== null
     && typeof candidate.stationDays === 'number'
-    && Number.isInteger(candidate.stationDays)
+    && Number.isSafeInteger(candidate.stationDays)
     && candidate.stationDays >= 0
+    && candidate.stationDays <= 366
     && typeof candidate.targetYear === 'number'
-    && Number.isInteger(candidate.targetYear)
-    && candidate.targetYear >= BIRTH_YEAR;
+    && Number.isSafeInteger(candidate.targetYear)
+    && candidate.targetYear >= BIRTH_YEAR
+    && candidate.targetYear <= 9999;
 }
 
 export function japanDateFromInstant(now: Date = new Date()): PlainDate {

@@ -68,8 +68,12 @@ function createStationDisplay(): StationDisplay {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.minFilter = THREE.LinearFilter;
   texture.generateMipmaps = false;
-  const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(3.55, 1.24), material);
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    toneMapped: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.25, 0.78), material);
   return { canvas, texture, mesh };
 }
 
@@ -146,8 +150,10 @@ export class RailwayWorld {
   private readonly scratchDirection = new THREE.Vector3();
   private readonly scratchCameraTarget = new THREE.Vector3();
   private readonly scratchStationPoint = new THREE.Vector3();
+  private readonly scratchDesiredDirection = new THREE.Vector3();
   private readonly confetti: ConfettiState;
   private animationFrame = 0;
+  private started = false;
   private journeyProgress = 0;
   private speed = 0;
   private running = false;
@@ -524,7 +530,7 @@ export class RailwayWorld {
     departurePlatform.receiveShadow = true;
     departureRoot.add(departurePlatform);
     this.departureDisplay.mesh.position.set(0, 1.25, 1.1);
-    this.departureDisplay.mesh.rotation.y = Math.PI / 2;
+    this.departureDisplay.mesh.rotation.y = -Math.PI / 2;
     departureRoot.add(this.departureDisplay.mesh);
     placeAlongCurve(departureRoot, this.curve, JOURNEY_RAIL_START, -1.55, 0);
     this.scene.add(departureRoot);
@@ -572,8 +578,12 @@ export class RailwayWorld {
       post.position.set(-1.52, 0.88, z);
       this.stationRoot.add(post);
     }
-    this.stationDisplay.mesh.position.set(-0.72, 1.68, -1.18);
-    this.stationDisplay.mesh.rotation.y = Math.PI / 2;
+    // Bring the platform sign close to the stopping point. This lets the final
+    // portrait shot stay intimate with the cab while still reading the whole
+    // station name, instead of pulling the camera so far back that the train
+    // becomes a miniature.
+    this.stationDisplay.mesh.position.set(-0.72, 2.35, -3.1);
+    this.stationDisplay.mesh.rotation.y = -Math.PI / 2;
     this.stationRoot.add(this.stationDisplay.mesh);
 
     const gateColumnGeometry = this.trackResource(new THREE.BoxGeometry(0.13, 2.55, 0.13));
@@ -601,8 +611,11 @@ export class RailwayWorld {
     for (let index = 0; index < 12; index += 1) {
       const material = this.trackResource(new THREE.MeshStandardMaterial({ color: balloonColors[index % balloonColors.length], roughness: 0.48 }));
       const balloon = new THREE.Mesh(balloonGeometry, material);
-      const side = index % 2 === 0 ? -1 : 1;
-      balloon.position.set(-1.4 - (index % 4) * 0.55, 2.3 + (index % 3) * 0.3, -2.1 + side * (0.5 + Math.floor(index / 4) * 0.42));
+      const column = index % 6;
+      const row = Math.floor(index / 6);
+      // Keep the station name sacred: balloons form two bunting rows above
+      // the board and sit behind its face instead of covering the day number.
+      balloon.position.set(-0.35 + row * 0.24, 3.02 + row * 0.34 + (column % 2) * 0.08, -4.02 + column * 0.38);
       balloon.scale.y = 1.22;
       balloon.visible = false;
       this.stationRoot.add(balloon);
@@ -653,6 +666,7 @@ export class RailwayWorld {
       decoration.visible = index < visibleCount;
     });
     this.stationGlow.intensity = toDays === 0 ? 18 : veryClose ? 10 : toDays <= 7 ? 5 : close ? 2 : 0;
+    this.invalidate();
   }
 
   setProgress(value: number): void {
@@ -696,12 +710,14 @@ export class RailwayWorld {
       this.camera.position.copy(this.desiredCamera);
       this.camera.lookAt(this.lookTarget);
     }
+    this.invalidate();
   }
 
   setMotion(running: boolean, speed: number): void {
     this.running = running;
     this.speed = Math.max(0, speed);
     this.formation.setLights(running || this.journeyProgress > 0.9);
+    this.invalidate();
   }
 
   celebrate(): void {
@@ -718,6 +734,7 @@ export class RailwayWorld {
     positions.needsUpdate = true;
     this.confetti.life = 3.2;
     this.confetti.points.visible = true;
+    this.invalidate();
   }
 
   private updateConfetti(delta: number): void {
@@ -739,6 +756,7 @@ export class RailwayWorld {
 
   private frame = (): void => {
     if (this.disposed) return;
+    this.animationFrame = 0;
     const delta = Math.min(this.clock.getDelta(), 0.05);
     this.formation.update(delta, this.speed);
     this.updateConfetti(delta);
@@ -750,27 +768,39 @@ export class RailwayWorld {
       .lerp(this.lookTarget, damping);
     this.camera.lookAt(this.scratchCameraTarget);
     this.renderer.render(this.scene, this.camera);
-    this.animationFrame = window.requestAnimationFrame(this.frame);
+    this.camera.getWorldDirection(this.scratchDirection);
+    this.scratchDesiredDirection.copy(this.lookTarget).sub(this.camera.position).normalize();
+    const cameraMoving = this.camera.position.distanceToSquared(this.desiredCamera) > 0.00001
+      || this.scratchDirection.angleTo(this.scratchDesiredDirection) > 0.0005;
+    if (this.running || this.confetti.life > 0 || cameraMoving) this.invalidate();
   };
 
-  start(): void {
-    if (this.animationFrame) return;
-    this.clock.start();
+  private invalidate(): void {
+    if (!this.started || this.disposed || this.animationFrame) return;
     this.animationFrame = window.requestAnimationFrame(this.frame);
+  }
+
+  start(): void {
+    if (this.started) return;
+    this.started = true;
+    this.clock.start();
+    this.invalidate();
   }
 
   resize(): void {
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
     this.camera.aspect = width / height;
-    this.camera.fov = width < 600 ? 50 : 42;
+    this.camera.fov = width < 600 ? 52 : 42;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.invalidate();
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.started = false;
     window.cancelAnimationFrame(this.animationFrame);
     this.formation.dispose();
     this.resources.forEach((resource) => resource.dispose());

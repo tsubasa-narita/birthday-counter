@@ -194,6 +194,9 @@ describe('ride memory', () => {
     expect(parseRideMemory('{not-json')).toBeNull();
     expect(parseRideMemory('{"riddenDate":"2026-02-30","stationDays":12,"targetYear":2026}')).toBeNull();
     expect(parseRideMemory('{"riddenDate":"2026-07-21","stationDays":-1,"targetYear":2026}')).toBeNull();
+    expect(parseRideMemory('{"riddenDate":"2026-07-21","stationDays":367,"targetYear":2026}')).toBeNull();
+    expect(parseRideMemory('{"riddenDate":"2026-07-21","stationDays":9007199254740991,"targetYear":2026}')).toBeNull();
+    expect(parseRideMemory('{"riddenDate":"2026-07-21","stationDays":12,"targetYear":9007199254740991}')).toBeNull();
     expect(parseRideMemory(null)).toBeNull();
   });
 });
