@@ -9,7 +9,7 @@
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
     <link rel="preload" href="assets/birthday-train.webp" as="image" type="image/webp" media="(min-width: 721px)" />
     <link rel="preload" href="assets/birthday-train-mobile.webp" as="image" type="image/webp" media="(max-width: 720px)" />
-    <link rel="stylesheet" href="styles-v3.css" />
+    <link rel="stylesheet" href="styles-v4.css" />
     <script>
       window.__birthdayBootTimer = window.setTimeout(function () {
         var message = document.getElementById('bootError');
@@ -17,7 +17,7 @@
       }, 4500);
     </script>
   </head>
-  <body data-build="20260719-v3">
+  <body data-build="20260721-v4">
     <main class="app" id="app">
       <picture class="hero-picture" aria-hidden="true">
         <source media="(max-width: 720px)" srcset="assets/birthday-train-mobile.webp" />
@@ -46,24 +46,72 @@
         </div>
         <h1 id="countdownTitle">3さいの おたんじょうびへ<br /><span>きょうも 1えき すすもう！</span></h1>
 
-        <div class="route-map" id="routeMap" aria-label="たんじょうび駅までの路線図">
-          <div class="route-copy">
-            <span>いまの えき</span>
-            <strong id="routeRemaining">あと 14 えき</strong>
+        <div class="route-theater" id="routeMap" aria-label="たんじょうび駅へ近づく路線ジオラマ">
+          <div class="route-theater-head">
+            <div>
+              <span class="route-eyebrow">たんじょうびまでの たび</span>
+              <strong id="routeRemaining">あと 14 えき</strong>
+            </div>
+            <div class="distance-badge">
+              <small>えきまで</small>
+              <b id="distanceMood">もうすぐ！</b>
+            </div>
           </div>
-          <div class="route-line" id="track" role="progressbar" aria-label="前のお誕生日から次のお誕生日までの進み具合" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <span class="route-traveled" id="trackFill"></span>
-            <span class="route-stop route-stop--one" aria-hidden="true"></span>
-            <span class="route-stop route-stop--two" aria-hidden="true"></span>
-            <span class="route-stop route-stop--three" aria-hidden="true"></span>
-            <span class="mini-train" id="miniTrain" aria-hidden="true">🚃</span>
-            <span class="goal-station" aria-hidden="true">🏠</span>
+
+          <div class="route-viewport" id="track" role="progressbar" aria-label="たんじょうび駅までの近づき具合" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span class="route-sun" aria-hidden="true"></span>
+            <span class="route-hill route-hill--back" aria-hidden="true"></span>
+            <span class="route-hill route-hill--front" aria-hidden="true"></span>
+            <svg class="route-diagram" viewBox="0 0 700 260" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="routeProgressGradient" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#78b995" />
+                  <stop offset="0.65" stop-color="#f3cf61" />
+                  <stop offset="1" stop-color="#ef7a58" />
+                </linearGradient>
+              </defs>
+              <path class="route-track-shadow" d="M38 214 C170 225 225 178 330 166 S500 112 646 70" />
+              <path class="route-track-base" d="M38 214 C170 225 225 178 330 166 S500 112 646 70" />
+              <path class="route-track-progress" id="trackFill" pathLength="100" d="M38 214 C170 225 225 178 330 166 S500 112 646 70" />
+              <path class="route-guide" id="routeGuide" pathLength="100" d="M38 214 C170 225 225 178 330 166 S500 112 646 70" />
+              <circle class="route-dot" cx="194" cy="201" r="7" />
+              <circle class="route-dot" cx="342" cy="163" r="7" />
+              <circle class="route-dot" cx="492" cy="117" r="7" />
+            </svg>
+
+            <div class="route-mini-train" id="miniTrain" aria-hidden="true">
+              <span class="route-now">いま</span>
+              <img id="homeRouteTrain" src="assets/train-loop-thumb-v2.webp" alt="" />
+            </div>
+
+            <div class="route-station-model" aria-hidden="true">
+              <i class="route-flag"></i>
+              <i class="route-station-roof"></i>
+              <i class="route-station-body"><span>🎂</span></i>
+              <i class="route-balloon route-balloon--one"></i>
+              <i class="route-balloon route-balloon--two"></i>
+            </div>
+
+            <span class="route-milestone route-milestone--start">30にち</span>
+            <span class="route-milestone route-milestone--week">あと7にち</span>
+            <span class="route-milestone route-milestone--goal">8/2<br />たんじょうびえき</span>
           </div>
-          <div class="route-labels">
-            <span>スタート</span>
-            <span>8/2<br />たんじょうびえき</span>
+
+          <div class="route-journey-copy">
+            <span id="routeJourneyMessage">きょうも 1えき、もっと ちかづくよ</span>
+            <strong><b id="routeDaysBig">14</b> えき</strong>
           </div>
         </div>
+
+        <button class="depart-button" id="departButton" type="button">
+          <span class="button-signal" aria-hidden="true"><i></i></span>
+          <span class="button-copy">
+            <strong id="buttonLabel">でんしゃを 1えき すすめる</strong>
+            <small id="buttonHint">なんどでも みられるよ</small>
+          </span>
+          <span class="button-arrow" aria-hidden="true">›</span>
+        </button>
+        <p class="ride-note" id="rideNote">おすと、きのうから きょうへ すすむよ</p>
 
         <fieldset class="train-picker" id="trainPicker">
           <legend>きょうの でんしゃを えらぼう</legend>
@@ -89,15 +137,6 @@
           </div>
         </fieldset>
 
-        <button class="depart-button" id="departButton" type="button">
-          <span class="button-signal" aria-hidden="true"><i></i></span>
-          <span class="button-copy">
-            <strong id="buttonLabel">おして しゅっぱつ！</strong>
-            <small id="buttonHint">あと14にちを はこぼう</small>
-          </span>
-          <span class="button-arrow" aria-hidden="true">›</span>
-        </button>
-        <p class="ride-note" id="rideNote">ボタンを おすと、でんしゃが はしるよ</p>
       </section>
 
       <p class="footer-note">まいにち 1かい、たんじょうびえきへ しゅっぱつ！</p>
@@ -114,7 +153,13 @@
           <source media="(max-width: 720px)" srcset="assets/journey-mobile-v2.webp" />
           <img id="journeyBackground" src="assets/journey-desktop-v2.webp" alt="" />
         </picture>
+        <picture class="arrival-backdrop" id="arrivalBackdrop">
+          <source media="(max-width: 720px)" srcset="assets/arrival-mobile-v3.webp" />
+          <img id="arrivalBackground" src="assets/arrival-desktop-v3.webp" alt="" />
+        </picture>
         <div class="scene-tint"></div>
+        <div class="camera-vignette"></div>
+        <div class="station-radiance"></div>
         <div class="speed-streaks"><i></i><i></i><i></i><i></i><i></i></div>
         <div class="scan-beam"></div>
       </div>
@@ -138,13 +183,36 @@
         <strong id="visualStatus">しゅっぱつ じゅんび</strong>
       </div>
 
+      <div class="approach-panel" id="approachPanel" aria-hidden="true">
+        <span class="approach-day" id="approachBefore">きのう あと15</span>
+        <div class="approach-line">
+          <span class="approach-fill" id="approachFill"></span>
+          <span class="approach-train" id="approachTrain">🚃</span>
+          <span class="approach-station">🎂</span>
+        </div>
+        <span class="approach-day approach-day--today" id="approachToday">きょう あと14</span>
+      </div>
+
       <div class="journey-stage" id="journeyStage" aria-hidden="true">
+        <div class="depth-track" id="depthTrack">
+          <i class="depth-rail depth-rail--left"></i>
+          <i class="depth-rail depth-rail--right"></i>
+          <span class="depth-sleepers"></span>
+        </div>
+        <div class="foreground-rush" id="foregroundRush">
+          <i>✿</i><i>●</i><i>✿</i><i>●</i><i>✿</i><i>●</i>
+        </div>
         <div class="train-shadow" id="trainShadow"></div>
         <div class="journey-vehicle" id="journeyVehicle">
           <img class="journey-train" id="journeyTrain" src="assets/train-loop-thumb-v2.webp" alt="" />
         </div>
         <div class="track-sleeper track-sleeper--one"></div>
         <div class="track-sleeper track-sleeper--two"></div>
+      </div>
+
+      <div class="arrival-sign" id="arrivalSign" aria-hidden="true">
+        <span>たんじょうびえき</span>
+        <strong><i id="arrivalSignPrefix">あと</i> <b id="arrivalSignDays">14</b> <i id="arrivalSignUnit">にち</i></strong>
       </div>
 
       <div class="journey-status sr-only" id="journeyStatus" aria-live="polite"></div>
@@ -157,11 +225,11 @@
         <p class="arrival-message" id="arrivalMessage">みどりの でんしゃが はこんだよ！</p>
         <div class="arrival-actions">
           <button class="return-button" id="returnButton" type="button" disabled>ホームへ</button>
-          <button class="replay-button" id="replayButton" type="button" disabled>つぎの でんしゃ！</button>
+          <button class="replay-button" id="replayButton" type="button" disabled>もういちど はしる！</button>
         </div>
       </div>
     </section>
 
-    <script src="app-v3.js" defer></script>
+    <script src="app-v4.js" defer></script>
   </body>
 </html>
