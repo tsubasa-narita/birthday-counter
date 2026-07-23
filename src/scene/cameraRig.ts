@@ -34,18 +34,17 @@ export function calculateCameraRig(progress: number): CameraRigSample {
   return {
     departureBlend,
     approachBlend,
-    // Portrait framing needs more distance than desktop: the train extends
-    // along the track while the station occupies the opposite side of frame.
-    lateral: lerp(lerp(7.4, 9.2, departureBlend), 7.9, approachBlend),
-    // Stay close enough for the cab to remain the hero. The architecture is
-    // moved toward the stop marker instead of sending the camera far ahead.
-    longitudinal: lerp(lerp(3.7, -1.2, departureBlend), 2.4, approachBlend),
-    height: lerp(lerp(3.1, 2.75, departureBlend), 3.05, approachBlend),
-    targetForward: lerp(lerp(-1.35, -1.6, departureBlend), -0.55, approachBlend),
-    // The station sits across the track from the camera. Aim between the cab
-    // and facade only on the final approach so departure remains unchanged.
-    targetLateral: stationFocusBlend === 0 ? 0 : stationFocusBlend * -1.1,
-    stationBlend: stationFocusBlend * 0.27,
-    targetHeight: lerp(0.72, 2.3, approachBlend),
+    // Pace the leading cab from ahead of the consist. This keeps the E235
+    // face visible as a three-quarter portrait instead of flattening the
+    // formation into a side-on rectangle halfway through the trip.
+    lateral: lerp(lerp(7.4, 6.5, departureBlend), 8, approachBlend),
+    longitudinal: lerp(lerp(3.7, 5, departureBlend), 7, approachBlend),
+    height: lerp(lerp(3.1, 2.25, departureBlend), 2.8, approachBlend),
+    targetForward: lerp(lerp(-1.35, -1.2, departureBlend), -1, approachBlend),
+    // Let the station share the frame without pulling focus away from the
+    // train. The architecture has already been moved close to the stop.
+    targetLateral: stationFocusBlend === 0 ? 0 : stationFocusBlend * -0.35,
+    stationBlend: stationFocusBlend * 0.14,
+    targetHeight: lerp(lerp(0.72, 0.9, departureBlend), 1.65, approachBlend),
   };
 }

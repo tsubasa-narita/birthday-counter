@@ -58,20 +58,20 @@ describe('calculateCameraRig', () => {
       stationBlend: 0,
     });
     const tracking = calculateCameraRig(0.4);
-    expect(tracking.lateral).toBeCloseTo(9.2);
-    expect(tracking.longitudinal).toBeCloseTo(-1.2);
-    expect(tracking.targetForward).toBeCloseTo(-1.6);
+    expect(tracking.lateral).toBeCloseTo(6.5);
+    expect(tracking.longitudinal).toBeCloseTo(5);
+    expect(tracking.targetForward).toBeCloseTo(-1.2);
     expect(tracking.targetLateral).toBe(0);
     expect(tracking.stationBlend).toBe(0);
     expect(calculateCameraRig(0.8).stationBlend).toBe(0);
     const arrival = calculateCameraRig(1);
-    expect(arrival.lateral).toBeCloseTo(7.9);
-    expect(arrival.longitudinal).toBeCloseTo(2.4);
-    expect(arrival.height).toBeCloseTo(3.05);
-    expect(arrival.targetForward).toBeCloseTo(-0.55);
-    expect(arrival.targetLateral).toBeCloseTo(-1.1);
-    expect(arrival.stationBlend).toBeCloseTo(0.27);
-    expect(arrival.targetHeight).toBeCloseTo(2.3);
+    expect(arrival.lateral).toBeCloseTo(8);
+    expect(arrival.longitudinal).toBeCloseTo(7);
+    expect(arrival.height).toBeCloseTo(2.8);
+    expect(arrival.targetForward).toBeCloseTo(-1);
+    expect(arrival.targetLateral).toBeCloseTo(-0.35);
+    expect(arrival.stationBlend).toBeCloseTo(0.14);
+    expect(arrival.targetHeight).toBeCloseTo(1.65);
   });
 
   it('全行程でカメラ値に瞬間的なジャンプがない', () => {
@@ -114,19 +114,26 @@ describe('3D route framing geometry', () => {
   it('390×844の最終画角に先頭車中心と駅名標中心を同時に収める', () => {
     const { camera, curve, point } = createFramingCamera(1);
     const leadCab = point.clone().add(new THREE.Vector3(0, 0.46, 0)).project(camera);
-    const stationSign = stationLocalPoint(curve, -4, 2.2, -2).project(camera);
-    const glassEntrance = stationLocalPoint(curve, -2.815, 1.02, -0.9).project(camera);
-    const gabledRoof = stationLocalPoint(curve, -3.13, 2.45, -0.9).project(camera);
+    const stationSign = stationLocalPoint(curve, -4, 2.1, -1.2).project(camera);
+    // stationBuildingRoot=(1.1, 0, -0.8); use the camera-facing facade and its
+    // trackside roof eave after applying that group transform. The ridge centre
+    // intentionally extends beyond the portrait crop so the building feels large.
+    const glassEntrance = stationLocalPoint(curve, -3.215, 1.02, 0.3).project(camera);
+    const roofEave = stationLocalPoint(curve, -3.5, 2.33, 0.3).project(camera);
 
-    expect(leadCab.x).toBeGreaterThan(-0.9);
-    expect(leadCab.x).toBeLessThan(-0.1);
+    // The final shot keeps the cab close to optical centre while the station
+    // fills the opposite side of the portrait frame.
+    expect(leadCab.x).toBeGreaterThan(-0.2);
+    expect(leadCab.x).toBeLessThan(0.2);
     expect(Math.abs(stationSign.x)).toBeLessThan(0.5);
-    expect(stationSign.y).toBeLessThan(0);
-    expect(stationSign.y).toBeGreaterThan(-0.35);
-    expect(glassEntrance.x).toBeLessThan(1);
-    expect(glassEntrance.x).toBeGreaterThan(0.35);
-    expect(gabledRoof.x).toBeLessThan(0.99);
-    expect(gabledRoof.y).toBeGreaterThan(-0.2);
+    expect(stationSign.y).toBeLessThan(0.2);
+    expect(stationSign.y).toBeGreaterThan(-0.2);
+    // The centre sits just outside portrait view while the wide sliding-door
+    // leaves and frame remain visible along the right edge.
+    expect(glassEntrance.x).toBeLessThan(1.1);
+    expect(glassEntrance.x).toBeGreaterThan(0.8);
+    expect(roofEave.x).toBeLessThan(0.99);
+    expect(roofEave.y).toBeGreaterThan(-0.2);
   });
 
   it('390×844の最終接近中も先頭面を画角から外さない', () => {
@@ -142,17 +149,17 @@ describe('3D route framing geometry', () => {
         + E235_DIMENSIONS.carPitch),
     ).project(midpoint.camera);
     expect(Math.abs(firstCarCentre.x)).toBeLessThan(0.45);
-    expect(secondCarCentre.x).toBeGreaterThan(-1.05);
-    expect(secondCarCentre.x).toBeLessThan(-0.75);
+    expect(secondCarCentre.x).toBeGreaterThan(-0.95);
+    expect(secondCarCentre.x).toBeLessThan(-0.55);
 
     const desktop = createFramingCamera(1, 1366 / 768, 42);
     const desktopEntrance = stationLocalPoint(
       desktop.curve,
-      -2.815,
+      -3.215,
       1.02,
-      -0.9,
+      0.3,
     ).project(desktop.camera);
-    expect(Math.abs(desktopEntrance.x)).toBeLessThan(0.4);
+    expect(Math.abs(desktopEntrance.x)).toBeLessThan(0.8);
     expect(Math.abs(desktopEntrance.y)).toBeLessThan(0.65);
   });
 });

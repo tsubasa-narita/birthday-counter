@@ -57,6 +57,9 @@ interface TrainMaterials {
   steelDark: THREE.MeshStandardMaterial;
   roof: THREE.MeshStandardMaterial;
   underbody: THREE.MeshStandardMaterial;
+  underbodyMid: THREE.MeshStandardMaterial;
+  underbodyLight: THREE.MeshStandardMaterial;
+  rubber: THREE.MeshStandardMaterial;
   window: THREE.MeshStandardMaterial;
   blue: THREE.MeshStandardMaterial;
   cream: THREE.MeshStandardMaterial;
@@ -89,16 +92,24 @@ interface GeometryBank {
   lamp: RoundedBoxGeometry;
   lampBezel: RoundedBoxGeometry;
   destination: THREE.PlaneGeometry;
-  bogie: RoundedBoxGeometry;
+  bogieSide: RoundedBoxGeometry;
   axleBox: THREE.BoxGeometry;
+  airSpring: THREE.CylinderGeometry;
   wheel: THREE.CylinderGeometry;
   wheelRim: THREE.CylinderGeometry;
+  tank: THREE.CylinderGeometry;
   equipment: RoundedBoxGeometry;
   roofFan: THREE.CylinderGeometry;
+  roofGrille: THREE.BoxGeometry;
   beam: THREE.CylinderGeometry;
   insulator: THREE.CylinderGeometry;
   contactStrip: RoundedBoxGeometry;
   coupler: THREE.BoxGeometry;
+  cabBrow: RoundedBoxGeometry;
+  cabCheek: RoundedBoxGeometry;
+  frontSkirt: RoundedBoxGeometry;
+  couplerPocket: RoundedBoxGeometry;
+  obstacleDeflector: RoundedBoxGeometry;
 }
 
 interface WheelRecord {
@@ -196,26 +207,81 @@ function drawDestination(
   texture.needsUpdate = true;
 }
 
-function createMaterials(destinationTexture: THREE.CanvasTexture): TrainMaterials {
+function createSteelSurfaceTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  if (context) {
+    context.fillStyle = '#b8b8b8';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Broad, low-contrast zones keep neighbouring stainless panels from reading
+    // as one flat plastic extrusion. Thin horizontal strokes form the hairline.
+    for (let panel = 0; panel < 8; panel += 1) {
+      const x = panel * 32;
+      const shade = panel % 3 === 0 ? 8 : panel % 3 === 1 ? -5 : 2;
+      context.fillStyle = `rgb(${184 + shade}, ${184 + shade}, ${184 + shade})`;
+      context.fillRect(x, 0, 32, canvas.height);
+    }
+    for (let y = 0; y < canvas.height; y += 2) {
+      const value = 151 + ((y * 17) % 29);
+      context.fillStyle = `rgba(${value}, ${value}, ${value}, ${y % 6 === 0 ? 0.28 : 0.14})`;
+      context.fillRect(0, y, canvas.width, 1);
+    }
+    for (let x = 13; x < canvas.width; x += 37) {
+      const gradient = context.createLinearGradient(x - 5, 0, x + 7, 0);
+      gradient.addColorStop(0, 'rgba(70, 74, 76, 0)');
+      gradient.addColorStop(0.5, 'rgba(70, 74, 76, 0.12)');
+      gradient.addColorStop(1, 'rgba(70, 74, 76, 0)');
+      context.fillStyle = gradient;
+      context.fillRect(x - 5, 0, 12, canvas.height);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.name = 'procedural stainless hairline roughness';
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 7);
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createMaterials(
+  destinationTexture: THREE.CanvasTexture,
+  steelSurfaceTexture: THREE.CanvasTexture,
+): TrainMaterials {
   return {
     steel: new THREE.MeshPhysicalMaterial({
-      color: 0xcdd4d5,
-      metalness: 0.84,
-      roughness: 0.34,
-      clearcoat: 0.12,
-      clearcoatRoughness: 0.38,
-      envMapIntensity: 1.12,
+      color: 0xc3cbcd,
+      metalness: 0.91,
+      roughness: 0.26,
+      roughnessMap: steelSurfaceTexture,
+      bumpMap: steelSurfaceTexture,
+      bumpScale: 0.0024,
+      clearcoat: 0.08,
+      clearcoatRoughness: 0.42,
+      envMapIntensity: 1.34,
     }),
     steelTrim: new THREE.MeshStandardMaterial({
-      color: 0xe4eaeb,
-      metalness: 0.86,
-      roughness: 0.28,
-      envMapIntensity: 1.05,
+      color: 0xd8dfe0,
+      metalness: 0.89,
+      roughness: 0.25,
+      roughnessMap: steelSurfaceTexture,
+      bumpMap: steelSurfaceTexture,
+      bumpScale: 0.0016,
+      envMapIntensity: 1.24,
     }),
     steelDark: new THREE.MeshStandardMaterial({
-      color: 0x9ba5a8,
-      metalness: 0.78,
-      roughness: 0.42,
+      color: 0x828e92,
+      metalness: 0.82,
+      roughness: 0.38,
+      roughnessMap: steelSurfaceTexture,
+      envMapIntensity: 1.05,
     }),
     roof: new THREE.MeshStandardMaterial({
       color: 0x939da0,
@@ -223,9 +289,24 @@ function createMaterials(destinationTexture: THREE.CanvasTexture): TrainMaterial
       roughness: 0.52,
     }),
     underbody: new THREE.MeshStandardMaterial({
-      color: 0x20272a,
-      metalness: 0.58,
-      roughness: 0.57,
+      color: 0x161c1f,
+      metalness: 0.62,
+      roughness: 0.56,
+    }),
+    underbodyMid: new THREE.MeshStandardMaterial({
+      color: 0x303a3e,
+      metalness: 0.55,
+      roughness: 0.5,
+    }),
+    underbodyLight: new THREE.MeshStandardMaterial({
+      color: 0x566267,
+      metalness: 0.7,
+      roughness: 0.42,
+    }),
+    rubber: new THREE.MeshStandardMaterial({
+      color: 0x080b0c,
+      metalness: 0.08,
+      roughness: 0.82,
     }),
     window: new THREE.MeshStandardMaterial({
       color: 0x101f28,
@@ -319,8 +400,14 @@ function createGeometryBank(profile: QualityProfile): GeometryBank {
     lamp: new RoundedBoxGeometry(0.055, 0.033, 0.014, 3, 0.008),
     lampBezel: new RoundedBoxGeometry(0.071, 0.047, 0.012, 3, 0.01),
     destination: new THREE.PlaneGeometry(0.175, 0.045),
-    bogie: new RoundedBoxGeometry(CAR_WIDTH * 0.76, 0.06, 0.33, 2, 0.012),
-    axleBox: new THREE.BoxGeometry(CAR_WIDTH * 0.82, 0.035, 0.048),
+    bogieSide: new RoundedBoxGeometry(0.045, 0.054, 0.31, 2, 0.012),
+    axleBox: new THREE.BoxGeometry(0.054, 0.05, 0.056),
+    airSpring: new THREE.CylinderGeometry(
+      0.035,
+      0.042,
+      0.035,
+      Math.max(8, profile.wheelSegments),
+    ),
     wheel: new THREE.CylinderGeometry(
       WHEEL_RADIUS,
       WHEEL_RADIUS,
@@ -328,11 +415,12 @@ function createGeometryBank(profile: QualityProfile): GeometryBank {
       profile.wheelSegments,
     ),
     wheelRim: new THREE.CylinderGeometry(
-      WHEEL_RADIUS * 0.52,
-      WHEEL_RADIUS * 0.52,
-      0.024,
+      WHEEL_RADIUS * 0.64,
+      WHEEL_RADIUS * 0.64,
+      0.025,
       profile.wheelSegments,
     ),
+    tank: new THREE.CylinderGeometry(0.036, 0.036, 0.27, Math.max(8, profile.wheelSegments)),
     equipment: new RoundedBoxGeometry(0.21, 0.055, 0.37, 2, 0.018),
     roofFan: new THREE.CylinderGeometry(
       0.052,
@@ -340,10 +428,16 @@ function createGeometryBank(profile: QualityProfile): GeometryBank {
       0.012,
       Math.max(8, profile.wheelSegments),
     ),
-    beam: new THREE.CylinderGeometry(0.006, 0.006, 1, profile.pantographSegments),
+    roofGrille: new THREE.BoxGeometry(0.16, 0.007, 0.22),
+    beam: new THREE.CylinderGeometry(0.008, 0.008, 1, profile.pantographSegments),
     insulator: new THREE.CylinderGeometry(0.018, 0.022, 0.03, profile.pantographSegments),
     contactStrip: new RoundedBoxGeometry(0.28, 0.012, 0.018, 2, 0.004),
     coupler: new THREE.BoxGeometry(0.08, 0.036, 0.082),
+    cabBrow: new RoundedBoxGeometry(CAR_WIDTH * 0.82, 0.038, 0.052, 3, 0.012),
+    cabCheek: new RoundedBoxGeometry(0.046, 0.252, 0.054, 3, 0.014),
+    frontSkirt: new RoundedBoxGeometry(CAR_WIDTH * 0.87, 0.075, 0.066, 3, 0.018),
+    couplerPocket: new RoundedBoxGeometry(0.125, 0.067, 0.052, 3, 0.014),
+    obstacleDeflector: new RoundedBoxGeometry(CAR_WIDTH * 0.66, 0.034, 0.082, 2, 0.009),
   };
 }
 
@@ -380,6 +474,9 @@ function addSideInstances(
     sx?: number;
     sy?: number;
     sz?: number;
+    rx?: number;
+    ry?: number;
+    rz?: number;
   }>,
   quality: TrainQuality,
 ): THREE.InstancedMesh {
@@ -387,6 +484,7 @@ function addSideInstances(
   const matrixObject = new THREE.Object3D();
   transforms.forEach((transform, index) => {
     matrixObject.position.set(transform.x, transform.y, transform.z);
+    matrixObject.rotation.set(transform.rx ?? 0, transform.ry ?? 0, transform.rz ?? 0);
     matrixObject.scale.set(transform.sx ?? 1, transform.sy ?? 1, transform.sz ?? 1);
     matrixObject.updateMatrix();
     instances.setMatrixAt(index, matrixObject.matrix);
@@ -417,6 +515,7 @@ function standardWindowPositions(windowBays: number): number[] {
 function addSideDetails(
   car: THREE.Group,
   greenCar: boolean,
+  cabOutwards: ReadonlyArray<1 | -1>,
   profile: QualityProfile,
   geometries: GeometryBank,
   materials: TrainMaterials,
@@ -424,43 +523,86 @@ function addSideDetails(
 ): void {
   const sideX = CAR_WIDTH * 0.5 + 0.0065;
   const sideTransforms = [-1, 1];
+  const doorZ = greenCar
+    ? [-CAR_LENGTH * 0.38, CAR_LENGTH * 0.38]
+    : [-CAR_LENGTH * 0.39, -CAR_LENGTH * 0.13, CAR_LENGTH * 0.13, CAR_LENGTH * 0.39];
 
   const bandDefinitions = [
     { y: 0.248, height: 0.038, material: materials.blue },
     { y: 0.214, height: 0.022, material: materials.cream },
   ];
   bandDefinitions.forEach((band) => {
-    const transforms = sideTransforms.map((side) => ({
-      x: side * sideX,
-      y: band.y,
-      z: 0,
-      sy: band.height,
-      sz: CAR_LENGTH * 0.94,
-    }));
+    const transforms = [
+      ...sideTransforms.flatMap((side) => [
+        {
+          x: side * (sideX + 0.006),
+          y: band.y,
+          z: 0,
+          sy: band.height,
+          sz: CAR_LENGTH * 0.94,
+        },
+        ...doorZ.map((z) => ({
+          x: side * (sideX + 0.016),
+          y: band.y,
+          z,
+          sy: band.height,
+          sz: 0.205,
+        })),
+      ]),
+      ...cabOutwards.map((outward) => ({
+        x: 0,
+        y: band.y,
+        z: outward * (CAR_LENGTH * 0.5 + 0.04),
+        sy: band.height,
+        sz: CAR_WIDTH * 0.76,
+        ry: Math.PI * 0.5,
+      })),
+    ];
     addSideInstances(car, geometries.sideBand, band.material, transforms, quality);
   });
 
-  const bodyTrimTransforms = sideTransforms.flatMap((side) => [
-    {
-      x: side * (sideX + 0.001),
-      y: 0.501,
-      z: 0,
-      sy: 0.009,
-      sz: CAR_LENGTH * 0.91,
-    },
-    {
-      x: side * (sideX + 0.001),
+  const bodyTrimTransforms = [
+    ...sideTransforms.flatMap((side) => [
+      {
+        x: side * (sideX + 0.001),
+        y: 0.501,
+        z: 0,
+        sy: 0.009,
+        sz: CAR_LENGTH * 0.91,
+      },
+      {
+        x: side * (sideX + 0.001),
+        y: 0.169,
+        z: 0,
+        sy: 0.012,
+        sz: CAR_LENGTH * 0.92,
+      },
+      {
+        x: side * (sideX + 0.002),
+        y: 0.535,
+        z: 0,
+        sy: 0.011,
+        sz: CAR_LENGTH * 0.91,
+      },
+      {
+        x: side * (sideX + 0.002),
+        y: 0.284,
+        z: 0,
+        sy: 0.006,
+        sz: CAR_LENGTH * 0.92,
+      },
+    ]),
+    ...cabOutwards.map((outward) => ({
+      x: 0,
       y: 0.169,
-      z: 0,
+      z: outward * (CAR_LENGTH * 0.5 + 0.038),
       sy: 0.012,
-      sz: CAR_LENGTH * 0.92,
-    },
-  ]);
+      sz: CAR_WIDTH * 0.86,
+      ry: Math.PI * 0.5,
+    })),
+  ];
   addSideInstances(car, geometries.sideBand, materials.steelDark, bodyTrimTransforms, quality);
 
-  const doorZ = greenCar
-    ? [-CAR_LENGTH * 0.38, CAR_LENGTH * 0.38]
-    : [-CAR_LENGTH * 0.39, -CAR_LENGTH * 0.13, CAR_LENGTH * 0.13, CAR_LENGTH * 0.39];
   const doorTransforms = sideTransforms.flatMap((side) =>
     doorZ.map((z) => ({ x: side * (sideX + 0.001), y: 0.344, z })),
   );
@@ -476,12 +618,26 @@ function addSideDetails(
   addSideInstances(car, geometries.doorWindow, materials.window, doorWindowTransforms, quality);
 
   const doorSplitTransforms = sideTransforms.flatMap((side) =>
-    doorZ.map((z) => ({
-      x: side * (sideX + 0.014),
-      y: 0.337,
-      z,
-      sy: 0.82,
-    })),
+    doorZ.flatMap((z) => [
+      {
+        x: side * (sideX + 0.014),
+        y: 0.337,
+        z,
+        sy: 0.82,
+      },
+      {
+        x: side * (sideX + 0.013),
+        y: 0.337,
+        z: z - 0.119,
+        sy: 0.93,
+      },
+      {
+        x: side * (sideX + 0.013),
+        y: 0.337,
+        z: z + 0.119,
+        sy: 0.93,
+      },
+    ]),
   );
   addSideInstances(car, geometries.panelSeam, materials.panelLine, doorSplitTransforms, quality);
 
@@ -527,36 +683,63 @@ function addUnderbodyEquipment(
   materials: TrainMaterials,
   quality: TrainQuality,
 ): void {
-  const transforms = [
-    { x: -0.055, y: 0.092, z: -0.57, sx: 1.08, sz: 0.82 },
-    { x: 0.045, y: 0.086, z: -0.12, sx: 0.86, sz: 1.18 },
-    { x: -0.035, y: 0.09, z: 0.42, sx: 1.16, sz: 0.92 },
+  const darkTransforms = [
+    { x: -0.055, y: 0.091, z: -0.56, sx: 1.08, sy: 1.08, sz: 0.76 },
+    { x: 0.045, y: 0.086, z: -0.14, sx: 0.76, sy: 0.82, sz: 1.15 },
+    { x: -0.035, y: 0.09, z: 0.39, sx: 1.16, sy: 1.14, sz: 0.82 },
   ];
-  addSideInstances(car, geometries.underbox, materials.underbody, transforms, quality);
+  addSideInstances(car, geometries.underbox, materials.underbody, darkTransforms, quality);
+
+  if (quality === 'low') return;
+
+  const lightTransforms = [
+    { x: 0.057, y: 0.096, z: -0.78, sx: 0.64, sy: 0.82, sz: 0.42 },
+    { x: -0.062, y: 0.089, z: 0.7, sx: 0.78, sy: 0.7, sz: 0.52 },
+  ];
+  addSideInstances(car, geometries.underbox, materials.underbodyMid, lightTransforms, quality);
+
+  const tankTransforms = [
+    { x: 0, y: 0.088, z: 0.12, rz: Math.PI * 0.5, sx: 0.78 },
+    { x: 0, y: 0.086, z: 0.63, rz: Math.PI * 0.5, sx: 0.62, sy: 0.83, sz: 0.83 },
+  ];
+  addSideInstances(car, geometries.tank, materials.underbodyLight, tankTransforms, quality);
 }
 
-function addBogie(
+function addRunningGear(
   car: THREE.Group,
-  z: number,
   geometries: GeometryBank,
   materials: TrainMaterials,
   quality: TrainQuality,
 ): void {
-  const bogie = new THREE.Group();
-  bogie.position.set(0, 0.098, z);
-  car.add(bogie);
+  const bogieCentres = [-CAR_LENGTH * 0.32, CAR_LENGTH * 0.32];
+  const sideFrameTransforms = bogieCentres.flatMap((z) =>
+    [-1, 1].map((side) => ({
+      x: side * CAR_WIDTH * 0.39,
+      y: 0.091,
+      z,
+    })),
+  );
+  addSideInstances(car, geometries.bogieSide, materials.underbodyMid, sideFrameTransforms, quality);
 
-  addMesh(bogie, geometries.bogie, materials.underbody, quality, true);
-  for (const axleZ of [-0.105, 0.105]) {
-    const axleBox = addMesh(
-      bogie,
-      geometries.axleBox,
-      materials.underbody,
-      quality,
-      true,
-    );
-    axleBox.position.z = axleZ;
-  }
+  const axleBoxTransforms = bogieCentres.flatMap((z) =>
+    [-0.105, 0.105].flatMap((axleOffset) =>
+      [-1, 1].map((side) => ({
+        x: side * CAR_WIDTH * 0.445,
+        y: 0.066,
+        z: z + axleOffset,
+      })),
+    ),
+  );
+  addSideInstances(car, geometries.axleBox, materials.underbodyLight, axleBoxTransforms, quality);
+
+  const airSpringTransforms = bogieCentres.flatMap((z) =>
+    [-1, 1].map((side) => ({
+      x: side * CAR_WIDTH * 0.255,
+      y: 0.132,
+      z,
+    })),
+  );
+  addSideInstances(car, geometries.airSpring, materials.rubber, airSpringTransforms, quality);
 }
 
 function addWheelObjects(
@@ -619,6 +802,7 @@ function addPantograph(
   const insulatorTransforms = [-1, 1].flatMap((side) => [
     { x: side * 0.085, y: 0.021, z: -0.065 },
     { x: side * 0.085, y: 0.021, z: 0.065 },
+    { x: side * 0.04, y: 0.021, z: 0 },
   ]);
   addSideInstances(
     pantograph,
@@ -632,14 +816,14 @@ function addPantograph(
   const lowerRight = new THREE.Vector3(0.1, 0.025, -0.02);
   const upperLeft = new THREE.Vector3(-0.07, 0.17, 0.02);
   const upperRight = new THREE.Vector3(0.07, 0.17, 0.02);
-  makeBeam(pantograph, lowerLeft, upperRight, geometries.beam, materials.underbody, quality);
-  makeBeam(pantograph, lowerRight, upperLeft, geometries.beam, materials.underbody, quality);
+  makeBeam(pantograph, lowerLeft, upperRight, geometries.beam, materials.underbodyLight, quality);
+  makeBeam(pantograph, lowerRight, upperLeft, geometries.beam, materials.underbodyLight, quality);
   makeBeam(
     pantograph,
     new THREE.Vector3(-0.07, 0.17, 0.02),
     new THREE.Vector3(0, 0.235, 0),
     geometries.beam,
-    materials.underbody,
+    materials.underbodyLight,
     quality,
   );
   makeBeam(
@@ -647,7 +831,7 @@ function addPantograph(
     new THREE.Vector3(0.07, 0.17, 0.02),
     new THREE.Vector3(0, 0.235, 0),
     geometries.beam,
-    materials.underbody,
+    materials.underbodyLight,
     quality,
   );
 
@@ -668,21 +852,21 @@ function addRoofEquipment(
   materials: TrainMaterials,
   quality: TrainQuality,
 ): void {
+  const equipmentTransforms: Array<{ x: number; y: number; z: number }> = [];
   const fanTransforms: Array<{ x: number; y: number; z: number }> = [];
+  const grilleTransforms: Array<{ x: number; y: number; z: number }> = [];
   for (let index = 0; index < count; index += 1) {
-    const equipment = addMesh(
-      car,
-      geometries.equipment,
-      materials.roof,
-      quality,
-      true,
-    );
     const fraction = count === 1 ? 0.5 : index / (count - 1);
     const z = CAR_LENGTH * 0.48 * (fraction - 0.5);
-    equipment.position.set(0, ROOF_Y + 0.045, z);
+    equipmentTransforms.push({ x: 0, y: ROOF_Y + 0.045, z });
     fanTransforms.push({ x: 0, y: ROOF_Y + 0.079, z });
+    grilleTransforms.push({ x: 0, y: ROOF_Y + 0.073, z });
   }
-  addSideInstances(car, geometries.roofFan, materials.underbody, fanTransforms, quality);
+  addSideInstances(car, geometries.equipment, materials.roof, equipmentTransforms, quality);
+  if (quality !== 'low') {
+    addSideInstances(car, geometries.roofGrille, materials.panelLine, grilleTransforms, quality);
+  }
+  addSideInstances(car, geometries.roofFan, materials.underbodyMid, fanTransforms, quality);
 }
 
 function addCoupler(
@@ -720,31 +904,61 @@ function addCabFace(
   glass.position.set(0, 0.42, outward * (CAR_LENGTH * 0.5 + 0.041));
   glass.rotation.y = faceRotation;
 
+  const browAndSill = [
+    {
+      x: 0,
+      y: 0.531,
+      z: outward * (CAR_LENGTH * 0.5 + 0.043),
+      sx: 1.02,
+      sy: 1,
+      ry: faceRotation,
+    },
+    {
+      x: 0,
+      y: 0.353,
+      z: outward * (CAR_LENGTH * 0.5 + 0.046),
+      sx: 0.84,
+      sy: 0.52,
+      ry: faceRotation,
+    },
+  ];
+  addSideInstances(car, geometries.cabBrow, materials.steelDark, browAndSill, quality);
+
+  const cheekTransforms = [-1, 1].map((side) => ({
+    x: side * CAR_WIDTH * 0.435,
+    y: 0.395,
+    z: outward * (CAR_LENGTH * 0.5 + 0.045),
+    ry: faceRotation,
+  }));
+  addSideInstances(car, geometries.cabCheek, materials.steelTrim, cheekTransforms, quality);
+
   const mullion = addMesh(car, geometries.cabMullion, materials.panelLine, quality, true);
   mullion.position.set(0, 0.42, outward * (CAR_LENGTH * 0.5 + 0.058));
   mullion.rotation.y = faceRotation;
 
-  for (const side of [-1, 1]) {
-    const wiper = addMesh(car, geometries.cabMullion, materials.panelLine, quality, true);
-    wiper.scale.y = 0.72;
-    wiper.position.set(side * CAR_WIDTH * 0.12, 0.397, outward * (CAR_LENGTH * 0.5 + 0.06));
-    wiper.rotation.y = faceRotation;
-    wiper.rotation.z = side * -0.42;
-  }
+  const wiperTransforms = [-1, 1].map((side) => ({
+    x: side * CAR_WIDTH * 0.12,
+    y: 0.397,
+    z: outward * (CAR_LENGTH * 0.5 + 0.06),
+    sy: 0.72,
+    ry: faceRotation,
+    rz: side * -0.42,
+  }));
+  addSideInstances(car, geometries.cabMullion, materials.panelLine, wiperTransforms, quality);
 
   const destination = addMesh(car, geometries.destination, materials.destination, quality, true);
   destination.position.set(0, 0.496, outward * (CAR_LENGTH * 0.5 + 0.06));
   destination.rotation.y = faceRotation;
 
-  for (const side of [-1, 1]) {
-    const bezel = addMesh(car, geometries.lampBezel, materials.steelTrim, quality, true);
-    bezel.position.set(
-      side * CAR_WIDTH * 0.26,
-      0.32,
-      outward * (CAR_LENGTH * 0.5 + 0.046),
-    );
-    bezel.rotation.y = faceRotation;
+  const bezelTransforms = [-1, 1].map((side) => ({
+    x: side * CAR_WIDTH * 0.26,
+    y: 0.32,
+    z: outward * (CAR_LENGTH * 0.5 + 0.046),
+    ry: faceRotation,
+  }));
+  addSideInstances(car, geometries.lampBezel, materials.steelTrim, bezelTransforms, quality);
 
+  for (const side of [-1, 1]) {
     const lamp = addMesh(car, geometries.lamp, materials.headlight, quality, true);
     lamp.position.set(
       side * CAR_WIDTH * 0.26,
@@ -768,20 +982,28 @@ function addCabFace(
     if (outward === -1) tailLights.push(tail);
   }
 
-  const blueApron = addMesh(car, geometries.sideBand, materials.blue, quality, true);
-  blueApron.position.set(0, 0.244, outward * (CAR_LENGTH * 0.5 + 0.033));
-  blueApron.rotation.y = Math.PI * 0.5;
-  blueApron.scale.set(1, 0.038, CAR_WIDTH * 0.76);
+  const frontSkirt = addMesh(car, geometries.frontSkirt, materials.steelDark, quality, true);
+  frontSkirt.position.set(0, 0.132, outward * (CAR_LENGTH * 0.5 + 0.04));
+  frontSkirt.rotation.y = faceRotation;
 
-  const creamApron = addMesh(car, geometries.sideBand, materials.cream, quality, true);
-  creamApron.position.set(0, 0.21, outward * (CAR_LENGTH * 0.5 + 0.034));
-  creamApron.rotation.y = Math.PI * 0.5;
-  creamApron.scale.set(1, 0.021, CAR_WIDTH * 0.76);
+  const pocket = addMesh(car, geometries.couplerPocket, materials.blackMask, quality, true);
+  pocket.position.set(0, 0.143, outward * (CAR_LENGTH * 0.5 + 0.077));
+  pocket.rotation.y = faceRotation;
 
-  const lowerSill = addMesh(car, geometries.sideBand, materials.steelDark, quality, true);
-  lowerSill.position.set(0, 0.169, outward * (CAR_LENGTH * 0.5 + 0.031));
-  lowerSill.rotation.y = Math.PI * 0.5;
-  lowerSill.scale.set(1, 0.012, CAR_WIDTH * 0.86);
+  const frontCoupler = addMesh(car, geometries.coupler, materials.underbodyLight, quality, true);
+  frontCoupler.scale.set(0.72, 0.8, 0.72);
+  frontCoupler.position.set(0, 0.141, outward * (CAR_LENGTH * 0.5 + 0.105));
+  frontCoupler.rotation.y = faceRotation;
+
+  const deflector = addMesh(
+    car,
+    geometries.obstacleDeflector,
+    materials.underbody,
+    quality,
+    true,
+  );
+  deflector.position.set(0, 0.069, outward * (CAR_LENGTH * 0.5 + 0.073));
+  deflector.rotation.y = faceRotation;
 }
 
 function createCar(
@@ -816,9 +1038,11 @@ function createCar(
   const skirt = addMesh(car, geometries.skirt, materials.steelDark, quality, true);
   skirt.position.y = BODY_BOTTOM + 0.008;
 
-  addSideDetails(car, greenCar, profile, geometries, materials, quality);
-  addBogie(car, -CAR_LENGTH * 0.32, geometries, materials, quality);
-  addBogie(car, CAR_LENGTH * 0.32, geometries, materials, quality);
+  const cabOutwards: Array<1 | -1> = [];
+  if (index === 0) cabOutwards.push(1);
+  if (index === carCount - 1) cabOutwards.push(-1);
+  addSideDetails(car, greenCar, cabOutwards, profile, geometries, materials, quality);
+  addRunningGear(car, geometries, materials, quality);
   addUnderbodyEquipment(car, geometries, materials, quality);
   addWheelObjects(car, wheelRecords);
   addRoofEquipment(car, profile.roofBoxes, geometries, materials, quality);
@@ -843,7 +1067,8 @@ export function createE235Formation(options: E235Options = {}): E235Formation {
   const carCount = options.carCount ?? 11;
   const profile = QUALITY_PROFILES[quality];
   const { canvas: destinationCanvas, texture: destinationTexture } = createDestinationDisplay();
-  const materials = createMaterials(destinationTexture);
+  const steelSurfaceTexture = createSteelSurfaceTexture();
+  const materials = createMaterials(destinationTexture, steelSurfaceTexture);
   const geometries = createGeometryBank(profile);
   const root = new THREE.Group();
   root.name = 'E235-1000 inspired formation';
@@ -885,6 +1110,10 @@ export function createE235Formation(options: E235Options = {}): E235Formation {
   wheelMesh.name = 'batched wheels';
   wheelMesh.castShadow = quality === 'high';
   wheelMesh.receiveShadow = quality !== 'low';
+  // Wheel instance matrices are rewritten in world space as the consist
+  // follows the curve. InstancedMesh does not refresh its cached bounds after
+  // those updates, so leave the two always-visible wheel batches uncullable.
+  wheelMesh.frustumCulled = false;
   wheelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const wheelRimMesh = new THREE.InstancedMesh(
     geometries.wheelRim,
@@ -894,6 +1123,7 @@ export function createE235Formation(options: E235Options = {}): E235Formation {
   wheelRimMesh.name = 'batched wheel rims';
   wheelRimMesh.castShadow = false;
   wheelRimMesh.receiveShadow = quality !== 'low';
+  wheelRimMesh.frustumCulled = false;
   wheelRimMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   root.add(wheelMesh, wheelRimMesh);
 
@@ -998,6 +1228,7 @@ export function createE235Formation(options: E235Options = {}): E235Formation {
     uniqueGeometries.forEach((geometry) => geometry.dispose());
     uniqueMaterials.forEach((material) => material.dispose());
     destinationTexture.dispose();
+    steelSurfaceTexture.dispose();
     root.clear();
     cars.length = 0;
     wheelRecords.length = 0;
