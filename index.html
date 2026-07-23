@@ -32,7 +32,7 @@
       <main class="experience" id="experience">
         <section class="station-hud" aria-labelledby="stationHeading">
           <div class="station-line" aria-hidden="true"><span></span></div>
-          <p class="station-kicker" id="stationKicker">きのうの えきから</p>
+          <p class="station-kicker" id="stationKicker">いまの えき</p>
           <h1 id="stationHeading">
             <span id="stationPrefix">あと</span>
             <strong id="stationDays">13</strong>
@@ -41,16 +41,36 @@
           <p class="today-meta" id="todayMeta">きょう 7がつ21にち</p>
         </section>
 
-        <section class="journey-guide" aria-label="たんじょうび駅までの案内">
-          <div class="guide-copy">
-            <span class="guide-label">つぎの えき</span>
-            <strong id="destinationName">あと12にちえき</strong>
-            <small id="proximityMessage">たんじょうびえきが みえてきたよ</small>
+        <section class="journey-guide" aria-labelledby="journeyMapTitle">
+          <p class="guide-label" id="journeyMapTitle">きょうは ひとえき すすむよ</p>
+          <div class="route-map" id="journeyRouteMap" role="img" aria-label="あと13にちえきから あと12にちえきへ">
+            <div class="route-station route-station-from" aria-hidden="true">
+              <span class="route-role" id="routeFromRole">いまの えき</span>
+              <span class="route-badge route-badge-from">
+                <small id="routeFromPrefix">あと</small>
+                <strong id="routeFromDays">13</strong>
+                <small id="routeFromUnit">にち</small>
+              </span>
+              <span class="route-station-word">えき</span>
+            </div>
+            <div class="journey-track" aria-hidden="true">
+              <span class="track-fill" id="journeyFill"></span>
+              <span class="track-train" id="journeyTrainIcon"><i></i></span>
+              <span class="track-direction">すすむ</span>
+            </div>
+            <div class="route-station route-station-to" aria-hidden="true">
+              <span class="route-role" id="routeToRole">つぎの えき</span>
+              <span class="route-badge route-badge-to">
+                <small id="routeToPrefix">あと</small>
+                <strong id="routeToDays">12</strong>
+                <small id="routeToUnit">にち</small>
+              </span>
+              <span class="route-station-word">えき</span>
+            </div>
           </div>
-          <div class="journey-track" aria-hidden="true">
-            <span class="track-fill" id="journeyFill"></span>
-            <span class="track-train" id="journeyTrainIcon"><i></i></span>
-            <span class="track-goal">🎂</span>
+          <div class="guide-copy">
+            <strong class="visually-hidden" id="destinationName">あと12にちえき</strong>
+            <small id="proximityMessage">たんじょうびえきが みえてきたよ</small>
           </div>
           <div class="station-pass" id="stationPass" aria-live="polite"></div>
         </section>
@@ -72,11 +92,19 @@
         </div>
       </main>
 
-      <aside class="arrival-panel" id="arrivalPanel" role="dialog" aria-modal="true" aria-labelledby="arrivalTitle" aria-describedby="arrivalMessage" hidden>
+      <aside class="arrival-panel" id="arrivalPanel" role="dialog" aria-modal="true" aria-labelledby="arrivalTitle" aria-describedby="arrivalProgressLabel arrivalStationName arrivalMessage" hidden>
         <div class="arrival-medal" aria-hidden="true">★</div>
-        <p>きょうの えきに</p>
+        <p id="arrivalProgressLabel">ひとえき すすんだよ</p>
         <h2 id="arrivalTitle">とうちゃく！</h2>
-        <div class="arrival-station-name" id="arrivalStationName">あと12にちえき</div>
+        <div class="arrival-route-change" aria-hidden="true">
+          <span id="arrivalFromStation">あと13にちえき</span>
+          <b>→</b>
+          <span>いま ここ！</span>
+        </div>
+        <div class="arrival-now-card">
+          <small>いまの えき</small>
+          <div class="arrival-station-name" id="arrivalStationName">あと12にちえき</div>
+        </div>
         <p class="arrival-message" id="arrivalMessage">たんじょうびえきが もっと ちかくなったよ</p>
         <div class="arrival-actions">
           <button id="replayButton" type="button">もういちど はしる！</button>

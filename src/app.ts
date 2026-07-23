@@ -87,6 +87,16 @@ const stationUnit = required<HTMLElement>('#stationUnit');
 const todayMeta = required<HTMLElement>('#todayMeta');
 const destinationName = required<HTMLElement>('#destinationName');
 const proximity = required<HTMLElement>('#proximityMessage');
+const journeyMapTitle = required<HTMLElement>('#journeyMapTitle');
+const journeyRouteMap = required<HTMLElement>('#journeyRouteMap');
+const routeFromRole = required<HTMLElement>('#routeFromRole');
+const routeFromPrefix = required<HTMLElement>('#routeFromPrefix');
+const routeFromDays = required<HTMLElement>('#routeFromDays');
+const routeFromUnit = required<HTMLElement>('#routeFromUnit');
+const routeToRole = required<HTMLElement>('#routeToRole');
+const routeToPrefix = required<HTMLElement>('#routeToPrefix');
+const routeToDays = required<HTMLElement>('#routeToDays');
+const routeToUnit = required<HTMLElement>('#routeToUnit');
 const journeyFill = required<HTMLElement>('#journeyFill');
 const journeyTrainIcon = required<HTMLElement>('#journeyTrainIcon');
 const journeyTrack = required<HTMLElement>('.journey-track');
@@ -95,6 +105,8 @@ const journeyStatus = required<HTMLElement>('#journeyStatus');
 const departLabel = required<HTMLElement>('#departLabel');
 const controlHint = required<HTMLElement>('#controlHint');
 const arrivalStationName = required<HTMLElement>('#arrivalStationName');
+const arrivalFromStation = required<HTMLElement>('#arrivalFromStation');
+const arrivalProgressLabel = required<HTMLElement>('#arrivalProgressLabel');
 const arrivalMessage = required<HTMLElement>('#arrivalMessage');
 const soundIcon = required<HTMLElement>('#soundIcon');
 const soundLabel = required<HTMLElement>('#soundLabel');
@@ -147,6 +159,12 @@ let journeyTrackTravel = 0;
 
 function updateJourneyHud(progress: number): void {
   displayedProgress = Math.min(1, Math.max(0, progress));
+  journeyRouteMap.style.setProperty('--journey-progress', String(displayedProgress));
+  journeyRouteMap.style.setProperty('--route-from-x', `${displayedProgress * -28}px`);
+  journeyRouteMap.style.setProperty('--route-from-scale', String(1 - displayedProgress * 0.28));
+  journeyRouteMap.style.setProperty('--route-from-opacity', String(1 - displayedProgress * 0.72));
+  journeyRouteMap.style.setProperty('--route-to-x', `${(1 - displayedProgress) * 10}px`);
+  journeyRouteMap.style.setProperty('--route-to-scale', String(0.92 + displayedProgress * 0.08));
   journeyFill.style.setProperty('--journey-progress', String(displayedProgress));
   journeyTrainIcon.style.setProperty('--journey-train-x', `${displayedProgress * journeyTrackTravel}px`);
 }
@@ -158,7 +176,7 @@ function measureJourneyTrack(): void {
 }
 
 function showStation(days: number, departure: boolean): void {
-  stationKicker.textContent = departure ? 'きのうの えきから' : 'きょうの えきに とうちゃく';
+  stationKicker.textContent = departure ? 'いまの えき' : 'いまの えきに とうちゃく';
   if (days === 0) {
     stationPrefix.textContent = '';
     stationDays.textContent = '🎂';
@@ -170,9 +188,44 @@ function showStation(days: number, departure: boolean): void {
   }
 }
 
+function setRouteBadge(
+  days: number,
+  prefix: HTMLElement,
+  number: HTMLElement,
+  unit: HTMLElement,
+): void {
+  const birthday = days === 0;
+  prefix.textContent = birthday ? '' : 'あと';
+  number.textContent = birthday ? '🎂' : String(days);
+  unit.textContent = birthday ? 'たんじょうび' : 'にち';
+  number.classList.toggle('is-birthday', birthday);
+}
+
+function updateRouteStations(plan: RidePlan, arrived: boolean): void {
+  setRouteBadge(plan.fromDays, routeFromPrefix, routeFromDays, routeFromUnit);
+  setRouteBadge(plan.toDays, routeToPrefix, routeToDays, routeToUnit);
+  routeFromRole.textContent = arrived ? 'まえの えき' : 'いまの えき';
+  routeToRole.textContent = arrived ? 'いまの えき' : plan.isCatchUp ? 'きょうの えき' : 'つぎの えき';
+  journeyMapTitle.textContent = arrived
+    ? plan.isCatchUp ? 'きょうの えきに ついたよ！' : 'ひとえき すすんだよ！'
+    : plan.isCatchUp ? 'きょうの えきまで すすむよ' : 'きょうは ひとえき すすむよ';
+  arrivalProgressLabel.textContent = plan.isCatchUp
+    ? 'きょうの えきまで すすんだよ'
+    : 'ひとえき すすんだよ';
+  journeyRouteMap.dataset.arrived = String(arrived);
+  journeyRouteMap.setAttribute(
+    'aria-label',
+    arrived
+      ? `${stationLabel(plan.toDays)}に とうちゃく。ここが いまの えきです`
+      : `${stationLabel(plan.fromDays)}が いまの えき。${stationLabel(plan.toDays)}へ すすみます`,
+  );
+  arrivalFromStation.textContent = stationLabel(plan.fromDays);
+}
+
 function preparePlan(plan: RidePlan): void {
   currentPlan = plan;
   showStation(plan.fromDays, true);
+  updateRouteStations(plan, false);
   destinationName.textContent = stationLabel(plan.toDays);
   proximity.textContent = proximityMessage(plan.toDays);
   departLabel.textContent = plan.toDays === 0 ? 'たんじょうびえきへ！' : 'ゆっくり しゅっぱつ';
@@ -216,6 +269,7 @@ function completeJourney(): void {
   audio.playArrival();
   safeStorageSet(RIDE_KEY, serializeRideMemory(memoryAfterArrival(countdown)));
   showStation(currentPlan.toDays, false);
+  updateRouteStations(currentPlan, true);
   destinationName.textContent = stationLabel(currentPlan.toDays);
   stationPass.textContent = currentPlan.toDays === 0 ? 'たんじょうびえき！' : `${stationLabel(currentPlan.toDays)} とうちゃく！`;
   updateJourneyHud(1);
@@ -277,7 +331,7 @@ async function runJourney(): Promise<void> {
   const lastPassIndex = { value: -1 };
   let statusStage = 0;
   const journeyDistance = world?.getJourneyDistance() ?? 0;
-  setStatus('しんごうが あおに なりました');
+  setStatus(`${stationLabel(currentPlan.fromDays)}から ${stationLabel(currentPlan.toDays)}へ`);
 
   activeTimeline?.kill();
   if (reducedMotion) {
@@ -297,7 +351,7 @@ async function runJourney(): Promise<void> {
       time: 1,
       duration,
       ease: 'none',
-      onStart: () => setStatus('E235けい しゅっぱつ！'),
+      onStart: () => setStatus(`${stationLabel(currentPlan.fromDays)}を しゅっぱつ！`),
       onUpdate: () => {
         const sample = sampleJourneyMotion(motion.time);
         const speed = journeyDistance * sample.normalizedVelocity / duration;
@@ -307,7 +361,7 @@ async function runJourney(): Promise<void> {
         updatePassStations(sample.progress, lastPassIndex);
         if (statusStage < 1 && sample.progress >= 0.12) {
           statusStage = 1;
-          setStatus('トンネルを ぬけて、たんじょうびえきへ');
+          setStatus(`${stationLabel(currentPlan.toDays)}へ ゆっくり すすむよ`);
         }
         if (statusStage < 2 && sample.progress >= 0.7) {
           statusStage = 2;
@@ -341,7 +395,7 @@ if (query.has('scene') && Number.isFinite(scenePreview) && scenePreview >= 0 && 
   world?.setProgress(scenePreview);
   app.dataset.scenePreview = String(scenePreview);
 }
-setStatus('E235けいが しゅっぱつを まっているよ');
+setStatus(`${stationLabel(currentPlan.fromDays)}で しゅっぱつを まっているよ`);
 
 departButton.addEventListener('click', () => { void runJourney(); });
 replayButton.addEventListener('click', () => {

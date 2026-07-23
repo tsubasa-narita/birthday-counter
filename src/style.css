@@ -16,6 +16,17 @@
 
 * { box-sizing: border-box; }
 
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 html,
 body {
   width: 100%;
@@ -203,7 +214,7 @@ button:focus-visible {
 
 .station-hud {
   position: relative;
-  width: min(365px, calc(100vw - 30px));
+  width: min(278px, calc(100vw - 30px));
   padding: 14px 18px 15px;
   overflow: hidden;
   border: 2px solid rgba(255,255,255,.88);
@@ -251,7 +262,7 @@ button:focus-visible {
   top: max(245px, 31%);
   right: max(15px, env(safe-area-inset-right));
   width: min(340px, calc(100vw - 30px));
-  padding: 13px 15px 14px;
+  padding: 10px 12px 11px;
   border: 1px solid rgba(255,255,255,.66);
   border-radius: 22px;
   background: rgba(8,40,56,.69);
@@ -262,15 +273,107 @@ button:focus-visible {
   transition: top 500ms cubic-bezier(.18,.82,.26,1), transform 500ms ease, opacity 350ms ease;
 }
 
-.guide-copy { display: grid; text-align: left; }
-.guide-label { color: #c5e7ed; font-size: 11px; font-weight: 900; letter-spacing: .12em; }
-.guide-copy strong { margin-top: 1px; font-size: 21px; font-weight: 950; }
-.guide-copy small { margin-top: 3px; color: #fff2b8; font-size: 12px; font-weight: 850; }
+.guide-label {
+  margin: 0;
+  color: #d9f2f4;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-align: center;
+}
+
+.guide-copy { display: grid; margin-top: 1px; text-align: center; }
+.guide-copy strong { font-size: 15px; font-weight: 950; }
+.guide-copy small { margin-top: 1px; color: #fff2b8; font-size: 10px; font-weight: 850; }
+
+.route-map {
+  position: relative;
+  height: 94px;
+  margin-top: 3px;
+  --route-from-x: 0px;
+  --route-from-scale: 1;
+  --route-from-opacity: 1;
+  --route-to-x: 10px;
+  --route-to-scale: .92;
+}
+
+.route-station {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  width: 76px;
+  display: grid;
+  justify-items: center;
+  transform-origin: 50% 70%;
+  will-change: transform, opacity;
+}
+
+.route-station-from {
+  left: 0;
+  opacity: var(--route-from-opacity);
+  transform: translate3d(var(--route-from-x), 0, 0) scale(var(--route-from-scale));
+}
+
+.route-station-to {
+  right: 0;
+  transform: translate3d(var(--route-to-x), 0, 0) scale(var(--route-to-scale));
+}
+
+.route-role {
+  min-width: 68px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #fff;
+  background: #176b91;
+  font-size: 9px;
+  font-weight: 950;
+  line-height: 1.35;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.route-station-to .route-role {
+  color: #3a3117;
+  background: #f4cf64;
+  box-shadow: 0 0 14px rgba(255,220,99,.72);
+}
+
+.route-badge {
+  position: relative;
+  width: 66px;
+  height: 52px;
+  margin-top: 3px;
+  display: grid;
+  place-items: center;
+  border: 3px solid rgba(255,255,255,.9);
+  border-radius: 14px;
+  color: var(--ink);
+  box-shadow: 0 7px 16px rgba(2,24,34,.3);
+  line-height: 1;
+}
+
+.route-badge-from { background: #eef8f8; }
+.route-badge-to {
+  border-color: #fff5b7;
+  background: linear-gradient(155deg, #fffdf1, #f5d979);
+  box-shadow: 0 7px 17px rgba(2,24,34,.28), 0 0 18px rgba(255,220,99,.64);
+}
+
+.route-badge small { position: absolute; left: 50%; font-size: 10px; font-weight: 950; line-height: 1; white-space: nowrap; transform: translateX(-50%); }
+.route-badge small:first-child { top: 2px; }
+.route-badge small:last-child { bottom: 1px; }
+.route-badge strong { color: var(--coral); font-size: 30px; font-weight: 950; letter-spacing: -.06em; }
+.route-badge strong.is-birthday { font-size: 24px; letter-spacing: 0; }
+.route-station-word { margin-top: 1px; color: #eaf8f7; font-size: 9px; font-weight: 950; }
 
 .journey-track {
-  position: relative;
-  height: 14px;
-  margin: 13px 25px 5px 2px;
+  position: absolute;
+  z-index: 1;
+  top: 55px;
+  right: 62px;
+  left: 62px;
+  height: 9px;
+  margin: 0;
   border: 2px solid rgba(255,255,255,.48);
   border-radius: 999px;
   background: repeating-linear-gradient(90deg, rgba(255,255,255,.2) 0 3px, transparent 3px 13px), rgba(2,27,39,.7);
@@ -293,8 +396,8 @@ button:focus-visible {
   z-index: 3;
   top: 50%;
   left: 0;
-  width: 42px;
-  height: 30px;
+  width: 32px;
+  height: 23px;
   border: 2px solid #d8e1e2;
   border-radius: 8px 8px 5px 5px;
   background: linear-gradient(180deg, #101a20 0 44%, #cbd2d3 45% 100%);
@@ -312,10 +415,22 @@ button:focus-visible {
   height: 4px;
 }
 
-.track-train::before { bottom: 10px; background: var(--blue); }
-.track-train::after { bottom: 6px; background: var(--cream); }
+.track-train::before { bottom: 7px; background: var(--blue); }
+.track-train::after { bottom: 3px; background: var(--cream); }
 .track-train i { display: none; }
-.track-goal { position: absolute; top: 50%; right: -29px; font-size: 28px; transform: translateY(-54%); }
+
+.track-direction {
+  position: absolute;
+  top: 13px;
+  left: 50%;
+  color: #d9f2f4;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  transform: translateX(-50%);
+}
+
+.track-direction::after { content: "  →"; color: #ffe680; }
 
 .station-pass {
   min-height: 18px;
@@ -395,7 +510,15 @@ button:focus-visible {
 .depart-copy small { color: #cfe9f0; font-size: 10px; font-weight: 900; }
 .depart-copy strong { margin-top: 1px; font-size: clamp(18px, 5.2vw, 28px); font-weight: 950; letter-spacing: .04em; white-space: nowrap; }
 .depart-arrow { font-size: 38px; line-height: 1; }
-.primary-controls p { margin: 6px 0 0; color: #fff; font-size: 12px; font-weight: 900; text-align: center; text-shadow: 0 2px 7px rgba(0,0,0,.66); }
+.primary-controls p {
+  margin: 6px 0 0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+  text-shadow: 0 2px 7px rgba(0,0,0,.66);
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
 
 .is-running .signal-lens i,
 .is-arrived .signal-lens i {
@@ -413,7 +536,9 @@ button:focus-visible {
   opacity: .94;
 }
 .is-running .depart-control { transform: translateY(110px); opacity: 0; pointer-events: none; }
-.is-running .journey-status { bottom: calc(168px + env(safe-area-inset-bottom)); font-size: 12px; }
+.is-running .primary-controls p,
+.is-arriving .primary-controls p { opacity: 0; visibility: hidden; }
+.is-running .journey-status { bottom: calc(224px + env(safe-area-inset-bottom)); font-size: 12px; }
 .is-arriving .topbar { opacity: .42; }
 .is-arriving .station-hud,
 .is-arriving .journey-guide,
@@ -467,7 +592,27 @@ button:focus-visible {
 
 .arrival-panel > p { margin: 0; font-size: 12px; font-weight: 900; }
 .arrival-panel h2 { margin: 2px 0; color: var(--coral); font-size: 34px; font-weight: 950; }
-.arrival-station-name { margin: 7px 0; padding: 11px; border: 3px solid var(--navy); border-radius: 16px; background: #fffdf5; font-size: clamp(25px, 8vw, 38px); font-weight: 950; }
+.arrival-route-change {
+  margin: 4px 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #6f7e84;
+  font-size: 10px;
+  font-weight: 900;
+}
+.arrival-route-change b { color: var(--coral); font-size: 19px; }
+.arrival-route-change span:last-child { padding: 3px 7px; border-radius: 999px; color: #fff; background: var(--blue); }
+.arrival-now-card {
+  padding: 7px;
+  border: 3px solid var(--navy);
+  border-radius: 18px;
+  background: #fffdf5;
+  box-shadow: inset 0 0 0 3px rgba(242,202,92,.42);
+}
+.arrival-now-card > small { color: var(--blue); font-size: 11px; font-weight: 950; letter-spacing: .08em; }
+.arrival-station-name { margin: 0; padding: 2px 5px 5px; font-size: clamp(28px, 9vw, 42px); font-weight: 950; }
 .arrival-message { color: #4c6575; }
 .arrival-actions { margin-top: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .arrival-actions button { min-height: 54px; padding: 8px 10px; border: 0; border-radius: 17px; font-size: 13px; font-weight: 950; cursor: pointer; }
@@ -543,7 +688,7 @@ button:focus-visible {
   .journey-guide { top: 180px; transform: scale(.88); transform-origin: 100% 0; }
   .is-running .station-hud { transform: scale(.74); }
   .is-running .journey-guide { top: auto; bottom: 19px; transform: scale(.78); }
-  .is-running .journey-status { bottom: 142px; }
+  .is-running .journey-status { bottom: calc(180px + env(safe-area-inset-bottom)); }
   .depart-control { min-height: 68px; }
   .arrival-panel { padding-top: 21px; padding-bottom: 12px; }
   .arrival-panel h2 { font-size: 27px; }

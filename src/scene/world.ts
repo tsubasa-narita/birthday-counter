@@ -6,6 +6,34 @@ const FORWARD = new THREE.Vector3(0, 0, 1);
 export const JOURNEY_RAIL_START = 0.31;
 export const JOURNEY_RAIL_END = 0.835;
 export const BIRTHDAY_STATION_RAIL = 0.865;
+export const ARRIVAL_ADVANCE_SIGN_RAIL = 0.78;
+
+export const DEPARTURE_SIGN_PLACEMENT = Object.freeze({
+  lateral: -1.55,
+  x: -0.7,
+  // The ready-state route card occupies the centre of a 390x844 screen. A
+  // taller, real-platform-style post places the board in the clear 210-264 px
+  // horizon band instead of hiding it behind that card or the train.
+  y: 2.62,
+  z: -1.15,
+  scale: 0.7,
+});
+
+export const ARRIVAL_ADVANCE_SIGN_PLACEMENT = Object.freeze({
+  lateral: -1.55,
+  x: -0.7,
+  y: 1.35,
+  z: -0.75,
+  scale: 0.72,
+});
+
+export const ARRIVAL_SIGN_PLACEMENT = Object.freeze({
+  lateral: -1.82,
+  x: -3.25,
+  y: 2.1,
+  z: -1.2,
+  scale: 0.68,
+});
 
 interface StationDisplay {
   canvas: HTMLCanvasElement;
@@ -316,15 +344,22 @@ function createStationDisplay(): StationDisplay {
   canvas.height = 360;
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
   const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
+    alphaTest: 0.04,
+    depthWrite: true,
     toneMapped: false,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.25, 0.78), material);
+  mesh.renderOrder = 2;
   return { canvas, texture, mesh };
 }
 
@@ -333,30 +368,49 @@ function paintStationDisplay(display: StationDisplay, days: number, departure: b
   if (!context) return;
   const { width, height } = display.canvas;
   context.clearRect(0, 0, width, height);
-  context.fillStyle = '#fffdf4';
+  const isBirthday = days === 0;
+  const outerRadius = departure ? 28 : 58;
+  context.fillStyle = departure ? '#fffaf0' : '#fffdf5';
   context.beginPath();
-  context.roundRect(15, 15, width - 30, height - 30, 34);
+  context.roundRect(15, 15, width - 30, height - 30, outerRadius);
   context.fill();
-  context.lineWidth = 22;
+  context.lineWidth = 24;
   context.strokeStyle = '#173f60';
   context.stroke();
-  context.fillStyle = departure ? '#dfd2aa' : '#17658a';
-  context.fillRect(34, 42, width - 68, 46);
-  context.fillStyle = departure ? '#304557' : '#e9dfb8';
-  context.fillRect(34, height - 88, width - 68, 42);
+
+  // Both boards belong to the same blue-and-cream line, while the warm
+  // departure cap and blue destination cap make their roles obvious before
+  // a child can read the smaller helper copy.
+  context.fillStyle = departure ? '#e5c76f' : '#17658a';
+  context.beginPath();
+  context.roundRect(34, 36, width - 68, 68, departure ? 12 : 28);
+  context.fill();
+  context.fillStyle = departure ? '#304557' : '#e8d691';
+  context.beginPath();
+  context.roundRect(34, height - 88, width - 68, 50, departure ? 10 : 22);
+  context.fill();
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillStyle = '#173247';
-  context.font = '800 54px "Noto Sans JP", "Yu Gothic", sans-serif';
-  context.fillText(departure ? 'きのうの えき' : 'きょうの えき', width / 2, 126);
-  const label = days === 0 ? 'たんじょうびえき' : `あと ${days} にちえき`;
-  let fontSize = days === 0 ? 104 : 126;
+  context.fillStyle = departure ? '#173247' : '#ffffff';
+  context.font = '900 50px "Noto Sans JP", "Yu Gothic", sans-serif';
+  context.fillText(departure ? 'いまの えき' : 'つぎの えき', width / 2, 70);
+
+  const label = isBirthday ? 'たんじょうび えき' : `あと ${days} にち えき`;
+  let fontSize = isBirthday ? 108 : 132;
   do {
     context.font = `950 ${fontSize}px "Noto Sans JP", "Yu Gothic", sans-serif`;
     fontSize -= 4;
-  } while (context.measureText(label).width > width - 90 && fontSize > 64);
-  context.fillStyle = days === 0 ? '#e55d46' : '#163b57';
-  context.fillText(label, width / 2, 224);
+  } while (context.measureText(label).width > width - 86 && fontSize > 72);
+  context.fillStyle = isBirthday ? '#e55740' : departure ? '#2c485e' : '#123f5d';
+  context.fillText(label, width / 2, 210);
+
+  context.fillStyle = departure ? '#ffffff' : '#173247';
+  context.font = '950 42px "Noto Sans JP", "Yu Gothic", sans-serif';
+  context.fillText(
+    departure ? '●  え き  ─' : '─  え き  ▶',
+    width / 2,
+    height - 63,
+  );
   display.texture.needsUpdate = true;
 }
 
@@ -445,6 +499,7 @@ export class RailwayWorld {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.scene.fog = new THREE.FogExp2(0xbfd9d5, 0.018);
     for (const display of [this.stationDisplay, this.departureDisplay]) {
+      display.texture.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
       this.resources.add(display.texture);
       this.resources.add(display.mesh.geometry);
       this.resources.add(display.mesh.material);
@@ -1073,6 +1128,54 @@ export class RailwayWorld {
       emissiveIntensity: 0.14,
       envMapIntensity: 1.05,
     }));
+    const departureSignFrame = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0x8a7440,
+      roughness: 0.48,
+      metalness: 0.34,
+    }));
+    const arrivalSignFrame = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0x174f6b,
+      roughness: 0.42,
+      metalness: 0.38,
+    }));
+    const signStructureGeometry = this.trackResource(new THREE.BoxGeometry(1, 1, 1));
+    const signDummy = new THREE.Object3D();
+    const addStationSignStructure = (
+      parent: THREE.Object3D,
+      position: Readonly<{ x: number; y: number; z: number }>,
+      scale: number,
+      material: THREE.MeshStandardMaterial,
+      floorY: number,
+    ): void => {
+      const boardWidth = 2.25 * scale;
+      const boardHeight = 0.78 * scale;
+      const backing = new THREE.Mesh(signStructureGeometry, material);
+      // The display faces local -X. Put its opaque metal backing a fraction
+      // behind the textured face so neither surface can z-fight.
+      backing.position.set(position.x + 0.05, position.y, position.z);
+      backing.scale.set(0.075, boardHeight + 0.11, boardWidth + 0.11);
+      backing.castShadow = quality === 'high';
+      backing.receiveShadow = true;
+
+      const boardBottom = position.y - boardHeight * 0.5;
+      const postHeight = Math.max(0.12, boardBottom - floorY);
+      const posts = new THREE.InstancedMesh(signStructureGeometry, material, 2);
+      for (const [index, direction] of [-1, 1].entries()) {
+        signDummy.position.set(
+          position.x + 0.065,
+          floorY + postHeight * 0.5,
+          position.z + direction * boardWidth * 0.34,
+        );
+        signDummy.rotation.set(0, 0, 0);
+        signDummy.scale.set(0.055, postHeight, 0.055);
+        signDummy.updateMatrix();
+        posts.setMatrixAt(index, signDummy.matrix);
+      }
+      posts.instanceMatrix.needsUpdate = true;
+      posts.castShadow = quality === 'high';
+      posts.receiveShadow = true;
+      parent.add(backing, posts);
+    };
 
     const departureRoot = new THREE.Group();
     const departurePlatform = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(2.1, 0.18, 8.5)), concrete);
@@ -1085,11 +1188,59 @@ export class RailwayWorld {
     const departureTactile = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.13, 0.035, 8.25)), tactileMaterial);
     departureTactile.position.set(0.91, 0.16, 0);
     departureRoot.add(departurePlatform, departureFascia, departureAccent, departureTactile);
-    this.departureDisplay.mesh.position.set(0, 1.25, 1.1);
+    this.departureDisplay.mesh.position.set(
+      DEPARTURE_SIGN_PLACEMENT.x,
+      DEPARTURE_SIGN_PLACEMENT.y,
+      DEPARTURE_SIGN_PLACEMENT.z,
+    );
     this.departureDisplay.mesh.rotation.y = -Math.PI / 2;
+    this.departureDisplay.mesh.scale.setScalar(DEPARTURE_SIGN_PLACEMENT.scale);
     departureRoot.add(this.departureDisplay.mesh);
-    placeAlongCurve(departureRoot, this.curve, JOURNEY_RAIL_START, -1.55, 0);
+    addStationSignStructure(
+      departureRoot,
+      DEPARTURE_SIGN_PLACEMENT,
+      DEPARTURE_SIGN_PLACEMENT.scale,
+      departureSignFrame,
+      0.16,
+    );
+    placeAlongCurve(
+      departureRoot,
+      this.curve,
+      JOURNEY_RAIL_START,
+      DEPARTURE_SIGN_PLACEMENT.lateral,
+      0,
+    );
     this.scene.add(departureRoot);
+
+    // Japanese platforms repeat the same station board along their length.
+    // Reuse the destination texture/material for an advance board so the next
+    // station is readable during the approach, then naturally leaves frame as
+    // the final building-mounted board takes over. This costs no extra texture.
+    const arrivalAdvanceRoot = new THREE.Group();
+    const arrivalAdvanceDisplay = this.stationDisplay.mesh.clone();
+    arrivalAdvanceDisplay.position.set(
+      ARRIVAL_ADVANCE_SIGN_PLACEMENT.x,
+      ARRIVAL_ADVANCE_SIGN_PLACEMENT.y,
+      ARRIVAL_ADVANCE_SIGN_PLACEMENT.z,
+    );
+    arrivalAdvanceDisplay.rotation.y = -Math.PI / 2;
+    arrivalAdvanceDisplay.scale.setScalar(ARRIVAL_ADVANCE_SIGN_PLACEMENT.scale);
+    arrivalAdvanceRoot.add(arrivalAdvanceDisplay);
+    addStationSignStructure(
+      arrivalAdvanceRoot,
+      ARRIVAL_ADVANCE_SIGN_PLACEMENT,
+      ARRIVAL_ADVANCE_SIGN_PLACEMENT.scale,
+      arrivalSignFrame,
+      0.02,
+    );
+    placeAlongCurve(
+      arrivalAdvanceRoot,
+      this.curve,
+      ARRIVAL_ADVANCE_SIGN_RAIL,
+      ARRIVAL_ADVANCE_SIGN_PLACEMENT.lateral,
+      0,
+    );
+    this.scene.add(arrivalAdvanceRoot);
 
     const platform = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(2.35, 0.2, 10.5)), concrete);
     platform.position.set(-1.22, 0.02, 0);
@@ -1431,14 +1582,24 @@ export class RailwayWorld {
     stationBuildingRoot.add(noticeFrame, noticePanel, equipmentBox);
     this.stationRoot.add(stationBuildingRoot);
 
-    // Bring the platform sign close to the stopping point. This lets the final
-    // portrait shot stay intimate with the cab while still reading the whole
-    // station name, instead of pulling the camera so far back that the train
-    // becomes a miniature.
-    this.stationDisplay.mesh.position.set(-4, 2.1, -1.2);
+    // Keep the final board on the station side of the portrait. Its projected
+    // centre is deliberately right of the cab, so the name and E235 face never
+    // compete for the same pixels in the arrival shot.
+    this.stationDisplay.mesh.position.set(
+      ARRIVAL_SIGN_PLACEMENT.x,
+      ARRIVAL_SIGN_PLACEMENT.y,
+      ARRIVAL_SIGN_PLACEMENT.z,
+    );
     this.stationDisplay.mesh.rotation.y = -Math.PI / 2;
-    this.stationDisplay.mesh.scale.setScalar(0.56);
+    this.stationDisplay.mesh.scale.setScalar(ARRIVAL_SIGN_PLACEMENT.scale);
     this.stationRoot.add(this.stationDisplay.mesh);
+    addStationSignStructure(
+      this.stationRoot,
+      ARRIVAL_SIGN_PLACEMENT,
+      ARRIVAL_SIGN_PLACEMENT.scale,
+      arrivalSignFrame,
+      0.17,
+    );
 
     const gateColumnGeometry = this.trackResource(new THREE.BoxGeometry(0.13, 2.55, 0.13));
     for (const x of [-1.62, 0.88]) {
@@ -1491,7 +1652,13 @@ export class RailwayWorld {
       platformLamps.setMatrixAt(index, detailDummy.matrix);
     }
     this.stationRoot.add(platformLamps);
-    placeAlongCurve(this.stationRoot, this.curve, BIRTHDAY_STATION_RAIL, -1.82, 0);
+    placeAlongCurve(
+      this.stationRoot,
+      this.curve,
+      BIRTHDAY_STATION_RAIL,
+      ARRIVAL_SIGN_PLACEMENT.lateral,
+      0,
+    );
     this.stationRoot.updateMatrixWorld(true);
     this.stationRoot.getWorldPosition(this.stationGlow.position);
     this.stationGlow.position.y += 3.2;

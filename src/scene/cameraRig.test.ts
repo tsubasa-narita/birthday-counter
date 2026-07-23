@@ -3,8 +3,12 @@ import * as THREE from 'three';
 import { calculateCameraRig } from './cameraRig';
 import { E235_DIMENSIONS } from './e235';
 import {
+  ARRIVAL_ADVANCE_SIGN_PLACEMENT,
+  ARRIVAL_ADVANCE_SIGN_RAIL,
+  ARRIVAL_SIGN_PLACEMENT,
   BIRTHDAY_STATION_RAIL,
   createRailCurve,
+  DEPARTURE_SIGN_PLACEMENT,
   JOURNEY_RAIL_END,
   JOURNEY_RAIL_START,
 } from './world';
@@ -41,10 +45,28 @@ function stationLocalPoint(
   y: number,
   z: number,
 ): THREE.Vector3 {
-  const point = curve.getPointAt(BIRTHDAY_STATION_RAIL);
-  const tangent = curve.getTangentAt(BIRTHDAY_STATION_RAIL).normalize();
+  return tracksideLocalPoint(
+    curve,
+    BIRTHDAY_STATION_RAIL,
+    ARRIVAL_SIGN_PLACEMENT.lateral,
+    x,
+    y,
+    z,
+  );
+}
+
+function tracksideLocalPoint(
+  curve: THREE.Curve<THREE.Vector3>,
+  railAmount: number,
+  lateral: number,
+  x: number,
+  y: number,
+  z: number,
+): THREE.Vector3 {
+  const point = curve.getPointAt(railAmount);
+  const tangent = curve.getTangentAt(railAmount).normalize();
   const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-  const root = point.clone().addScaledVector(normal, -1.82);
+  const root = point.clone().addScaledVector(normal, lateral);
   const rotation = new THREE.Quaternion().setFromUnitVectors(FORWARD, tangent);
   return new THREE.Vector3(x, y, z).applyQuaternion(rotation).add(root);
 }
@@ -132,7 +154,12 @@ describe('3D route framing geometry', () => {
   it('390×844の最終画角に先頭車中心と駅名標中心を同時に収める', () => {
     const { camera, curve, point } = createFramingCamera(1);
     const leadCab = point.clone().add(new THREE.Vector3(0, 0.46, 0)).project(camera);
-    const stationSign = stationLocalPoint(curve, -4, 2.1, -1.2).project(camera);
+    const stationSign = stationLocalPoint(
+      curve,
+      ARRIVAL_SIGN_PLACEMENT.x,
+      ARRIVAL_SIGN_PLACEMENT.y,
+      ARRIVAL_SIGN_PLACEMENT.z,
+    ).project(camera);
     // stationBuildingRoot=(1.1, 0, -0.8); use the camera-facing facade and its
     // trackside roof eave after applying that group transform. The ridge centre
     // intentionally extends beyond the portrait crop so the building feels large.
@@ -152,6 +179,81 @@ describe('3D route framing geometry', () => {
     expect(glassEntrance.x).toBeGreaterThan(0.8);
     expect(roofEave.x).toBeLessThan(0.99);
     expect(roofEave.y).toBeGreaterThan(-0.2);
+  });
+
+  it('発車標は縦画面で読める大きさに入り、列車の後方へ離れる', () => {
+    const start = createFramingCamera(0);
+    const placement = DEPARTURE_SIGN_PLACEMENT;
+    const centre = tracksideLocalPoint(
+      start.curve,
+      JOURNEY_RAIL_START,
+      placement.lateral,
+      placement.x,
+      placement.y,
+      placement.z,
+    ).project(start.camera);
+    const left = tracksideLocalPoint(
+      start.curve,
+      JOURNEY_RAIL_START,
+      placement.lateral,
+      placement.x,
+      placement.y,
+      placement.z - 1.125 * placement.scale,
+    ).project(start.camera);
+    const right = tracksideLocalPoint(
+      start.curve,
+      JOURNEY_RAIL_START,
+      placement.lateral,
+      placement.x,
+      placement.y,
+      placement.z + 1.125 * placement.scale,
+    ).project(start.camera);
+
+    expect(centre.x).toBeGreaterThan(0.05);
+    expect(centre.x).toBeLessThan(0.65);
+    // The sign occupies the narrow horizon gap between the ready-state cards.
+    expect(centre.y).toBeGreaterThan(0.35);
+    expect(centre.y).toBeLessThan(0.55);
+    // >110 px at 390 px viewport width, enough for the large day number.
+    expect(Math.abs(right.x - left.x) * 195).toBeGreaterThan(110);
+
+    const departed = createFramingCamera(0.08);
+    const receding = tracksideLocalPoint(
+      departed.curve,
+      JOURNEY_RAIL_START,
+      placement.lateral,
+      placement.x,
+      placement.y,
+      placement.z,
+    ).project(departed.camera);
+    expect(receding.x).toBeLessThan(-1);
+  });
+
+  it('到着標は接近用反復標から駅舎前の最終標へ自然に受け継ぐ', () => {
+    const approach = createFramingCamera(0.88);
+    const advance = ARRIVAL_ADVANCE_SIGN_PLACEMENT;
+    const advanceCentre = tracksideLocalPoint(
+      approach.curve,
+      ARRIVAL_ADVANCE_SIGN_RAIL,
+      advance.lateral,
+      advance.x,
+      advance.y,
+      advance.z,
+    ).project(approach.camera);
+    expect(Math.abs(advanceCentre.x)).toBeLessThan(0.65);
+    expect(Math.abs(advanceCentre.y)).toBeLessThan(0.3);
+
+    const arrival = createFramingCamera(1);
+    const finalCentre = stationLocalPoint(
+      arrival.curve,
+      ARRIVAL_SIGN_PLACEMENT.x,
+      ARRIVAL_SIGN_PLACEMENT.y,
+      ARRIVAL_SIGN_PLACEMENT.z,
+    ).project(arrival.camera);
+    const leadCab = arrival.point.clone().add(new THREE.Vector3(0, 0.46, 0)).project(arrival.camera);
+    expect(finalCentre.x).toBeGreaterThan(0.25);
+    expect(finalCentre.x).toBeLessThan(0.65);
+    expect(finalCentre.x - leadCab.x).toBeGreaterThan(0.25);
   });
 
   it('390×844の最終接近中も先頭面を画角から外さない', () => {
