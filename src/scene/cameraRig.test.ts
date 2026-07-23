@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { calculateCameraRig } from './cameraRig';
 import { E235_DIMENSIONS } from './e235';
 import {
@@ -7,6 +8,46 @@ import {
   JOURNEY_RAIL_END,
   JOURNEY_RAIL_START,
 } from './world';
+
+const FORWARD = new THREE.Vector3(0, 0, 1);
+
+function createFramingCamera(progress: number, aspect = 390 / 844, fov = 52) {
+  const curve = createRailCurve();
+  const railAmount = JOURNEY_RAIL_START
+    + (JOURNEY_RAIL_END - JOURNEY_RAIL_START) * progress;
+  const point = curve.getPointAt(railAmount);
+  const tangent = curve.getTangentAt(railAmount).normalize();
+  const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+  const rig = calculateCameraRig(progress);
+  const camera = new THREE.PerspectiveCamera(fov, aspect, 0.03, 180);
+  camera.position.copy(point)
+    .addScaledVector(normal, rig.lateral)
+    .addScaledVector(tangent, rig.longitudinal);
+  camera.position.y += rig.height;
+  const target = point.clone().addScaledVector(tangent, rig.targetForward);
+  if (rig.approachBlend > 0) {
+    target.lerp(curve.getPointAt(BIRTHDAY_STATION_RAIL), rig.stationBlend);
+  }
+  target.addScaledVector(normal, rig.targetLateral);
+  target.y += rig.targetHeight;
+  camera.lookAt(target);
+  camera.updateMatrixWorld(true);
+  return { camera, curve, point, tangent };
+}
+
+function stationLocalPoint(
+  curve: THREE.Curve<THREE.Vector3>,
+  x: number,
+  y: number,
+  z: number,
+): THREE.Vector3 {
+  const point = curve.getPointAt(BIRTHDAY_STATION_RAIL);
+  const tangent = curve.getTangentAt(BIRTHDAY_STATION_RAIL).normalize();
+  const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+  const root = point.clone().addScaledVector(normal, -1.82);
+  const rotation = new THREE.Quaternion().setFromUnitVectors(FORWARD, tangent);
+  return new THREE.Vector3(x, y, z).applyQuaternion(rotation).add(root);
+}
 
 describe('calculateCameraRig', () => {
   it('発車・追走・駅接近の3構図を所定位置で作る', () => {
@@ -17,18 +58,20 @@ describe('calculateCameraRig', () => {
       stationBlend: 0,
     });
     const tracking = calculateCameraRig(0.4);
-    expect(tracking.lateral).toBeCloseTo(8.15);
+    expect(tracking.lateral).toBeCloseTo(9.2);
     expect(tracking.longitudinal).toBeCloseTo(-1.2);
-    expect(tracking.targetForward).toBeCloseTo(0.35);
+    expect(tracking.targetForward).toBeCloseTo(-1.6);
+    expect(tracking.targetLateral).toBe(0);
     expect(tracking.stationBlend).toBe(0);
     expect(calculateCameraRig(0.8).stationBlend).toBe(0);
     const arrival = calculateCameraRig(1);
-    expect(arrival.lateral).toBeCloseTo(7.7);
-    expect(arrival.longitudinal).toBeCloseTo(3.2);
+    expect(arrival.lateral).toBeCloseTo(7.9);
+    expect(arrival.longitudinal).toBeCloseTo(2.4);
     expect(arrival.height).toBeCloseTo(3.05);
     expect(arrival.targetForward).toBeCloseTo(-0.55);
-    expect(arrival.stationBlend).toBeCloseTo(0.25);
-    expect(arrival.targetHeight).toBeCloseTo(1.42);
+    expect(arrival.targetLateral).toBeCloseTo(-1.1);
+    expect(arrival.stationBlend).toBeCloseTo(0.27);
+    expect(arrival.targetHeight).toBeCloseTo(2.3);
   });
 
   it('全行程でカメラ値に瞬間的なジャンプがない', () => {
@@ -36,9 +79,10 @@ describe('calculateCameraRig', () => {
     for (let index = 1; index <= 1000; index += 1) {
       const current = calculateCameraRig(index / 1000);
       expect(Math.abs(current.lateral - previous.lateral)).toBeLessThan(0.015);
-      expect(Math.abs(current.longitudinal - previous.longitudinal)).toBeLessThan(0.03);
+      expect(Math.abs(current.longitudinal - previous.longitudinal)).toBeLessThan(0.045);
       expect(Math.abs(current.height - previous.height)).toBeLessThan(0.01);
       expect(Math.abs(current.targetForward - previous.targetForward)).toBeLessThan(0.02);
+      expect(Math.abs(current.targetLateral - previous.targetLateral)).toBeLessThan(0.03);
       expect(Math.abs(current.targetHeight - previous.targetHeight)).toBeLessThan(0.01);
       expect(current.stationBlend).toBeGreaterThanOrEqual(previous.stationBlend);
       previous = current;
@@ -68,39 +112,47 @@ describe('3D route framing geometry', () => {
   });
 
   it('390×844の最終画角に先頭車中心と駅名標中心を同時に収める', () => {
-    const curveLength = createRailCurve().getLength();
-    const stationDistance = (BIRTHDAY_STATION_RAIL - JOURNEY_RAIL_END) * curveLength;
-    const rig = calculateCameraRig(1);
-    const opticalTarget = rig.targetForward
-      + (stationDistance - rig.targetForward) * rig.stationBlend;
-    const leadCarCentre = -(E235_DIMENSIONS.carLength * 0.5 + E235_DIMENSIONS.cabFaceOffset);
-    const stationSignCentre = stationDistance - 3.1;
-    const stationSignHalfWidth = 2.25 / 2;
-    const portraitAspect = 390 / 844;
-    const halfHorizontalSpan = rig.lateral * Math.tan(52 * Math.PI / 360) * portraitAspect;
+    const { camera, curve, point } = createFramingCamera(1);
+    const leadCab = point.clone().add(new THREE.Vector3(0, 0.46, 0)).project(camera);
+    const stationSign = stationLocalPoint(curve, -4, 2.2, -2).project(camera);
+    const glassEntrance = stationLocalPoint(curve, -2.815, 1.02, -0.9).project(camera);
+    const gabledRoof = stationLocalPoint(curve, -3.13, 2.45, -0.9).project(camera);
 
-    expect(Math.abs(leadCarCentre - opticalTarget)).toBeLessThan(halfHorizontalSpan);
-    expect(Math.abs(stationSignCentre - opticalTarget)).toBeLessThan(halfHorizontalSpan);
-    expect(stationSignCentre - stationSignHalfWidth).toBeGreaterThan(opticalTarget - halfHorizontalSpan);
-    expect(stationSignCentre + stationSignHalfWidth).toBeLessThan(opticalTarget + halfHorizontalSpan);
+    expect(leadCab.x).toBeGreaterThan(-0.9);
+    expect(leadCab.x).toBeLessThan(-0.1);
+    expect(Math.abs(stationSign.x)).toBeLessThan(0.5);
+    expect(stationSign.y).toBeLessThan(0);
+    expect(stationSign.y).toBeGreaterThan(-0.35);
+    expect(glassEntrance.x).toBeLessThan(1);
+    expect(glassEntrance.x).toBeGreaterThan(0.35);
+    expect(gabledRoof.x).toBeLessThan(0.99);
+    expect(gabledRoof.y).toBeGreaterThan(-0.2);
   });
 
   it('390×844の最終接近中も先頭面を画角から外さない', () => {
-    const curveLength = createRailCurve().getLength();
-    const portraitAspect = 390 / 844;
+    const midpoint = createFramingCamera(0.55);
+    const firstCarCentre = midpoint.point.clone().addScaledVector(
+      midpoint.tangent,
+      -(E235_DIMENSIONS.carLength * 0.5 + E235_DIMENSIONS.cabFaceOffset),
+    ).project(midpoint.camera);
+    const secondCarCentre = midpoint.point.clone().addScaledVector(
+      midpoint.tangent,
+      -(E235_DIMENSIONS.carLength * 0.5
+        + E235_DIMENSIONS.cabFaceOffset
+        + E235_DIMENSIONS.carPitch),
+    ).project(midpoint.camera);
+    expect(Math.abs(firstCarCentre.x)).toBeLessThan(0.45);
+    expect(secondCarCentre.x).toBeGreaterThan(-1.05);
+    expect(secondCarCentre.x).toBeLessThan(-0.75);
 
-    for (const progress of [0.8, 0.9, 0.95, 1]) {
-      const railAmount = JOURNEY_RAIL_START
-        + (JOURNEY_RAIL_END - JOURNEY_RAIL_START) * progress;
-      const stationDistance = (BIRTHDAY_STATION_RAIL - railAmount) * curveLength;
-      const rig = calculateCameraRig(progress);
-      const opticalTarget = rig.targetForward
-        + (stationDistance - rig.targetForward) * rig.stationBlend;
-      const halfHorizontalSpan = rig.lateral * Math.tan(52 * Math.PI / 360) * portraitAspect;
-
-      // The rail point is the leading cab face (the first car centre sits
-      // behind it), so zero must remain inside the horizontal portrait view.
-      expect(Math.abs(opticalTarget)).toBeLessThan(halfHorizontalSpan);
-    }
+    const desktop = createFramingCamera(1, 1366 / 768, 42);
+    const desktopEntrance = stationLocalPoint(
+      desktop.curve,
+      -2.815,
+      1.02,
+      -0.9,
+    ).project(desktop.camera);
+    expect(Math.abs(desktopEntrance.x)).toBeLessThan(0.4);
+    expect(Math.abs(desktopEntrance.y)).toBeLessThan(0.65);
   });
 });

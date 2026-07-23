@@ -46,7 +46,11 @@ export function createRailCurve(): THREE.CatmullRomCurve3 {
   ], false, 'centripetal', 0.5);
 }
 
-function offsetCurve(source: THREE.Curve<THREE.Vector3>, offset: number): THREE.CatmullRomCurve3 {
+function offsetCurve(
+  source: THREE.Curve<THREE.Vector3>,
+  offset: number,
+  height = 0,
+): THREE.CatmullRomCurve3 {
   const points: THREE.Vector3[] = [];
   const tangent = new THREE.Vector3();
   const normal = new THREE.Vector3();
@@ -55,9 +59,73 @@ function offsetCurve(source: THREE.Curve<THREE.Vector3>, offset: number): THREE.
     const point = source.getPointAt(amount);
     source.getTangentAt(amount, tangent).normalize();
     normal.set(-tangent.z, 0, tangent.x).normalize();
-    points.push(point.addScaledVector(normal, offset));
+    point.addScaledVector(normal, offset);
+    point.y += height;
+    points.push(point);
   }
   return new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5);
+}
+
+function createSkyEnvironmentTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const context = canvas.getContext('2d');
+  if (context) {
+    const sky = context.createLinearGradient(0, 0, 0, canvas.height);
+    sky.addColorStop(0, '#75a9cb');
+    sky.addColorStop(0.46, '#d6edf2');
+    sky.addColorStop(0.54, '#f5e8c5');
+    sky.addColorStop(0.57, '#78977a');
+    sky.addColorStop(1, '#314a42');
+    context.fillStyle = sky;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const glow = context.createRadialGradient(382, 76, 3, 382, 76, 74);
+    glow.addColorStop(0, 'rgba(255,250,214,.95)');
+    glow.addColorStop(1, 'rgba(255,239,192,0)');
+    context.fillStyle = glow;
+    context.fillRect(290, 0, 190, 160);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createBallastTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 192;
+  canvas.height = 192;
+  const context = canvas.getContext('2d');
+  const random = seededRandom(235235);
+  if (context) {
+    context.fillStyle = '#69665f';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const palette = ['#383b39', '#77736a', '#999185', '#555653', '#b0a99a'];
+    for (let index = 0; index < 720; index += 1) {
+      const radius = 1.2 + random() * 3.6;
+      context.fillStyle = palette[Math.floor(random() * palette.length)];
+      context.beginPath();
+      context.ellipse(
+        random() * canvas.width,
+        random() * canvas.height,
+        radius * (0.7 + random() * 0.6),
+        radius,
+        random() * Math.PI,
+        0,
+        Math.PI * 2,
+      );
+      context.fill();
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(5, 36);
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function createStationDisplay(): StationDisplay {
@@ -72,6 +140,7 @@ function createStationDisplay(): StationDisplay {
     map: texture,
     transparent: true,
     toneMapped: false,
+    side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.25, 0.78), material);
   return { canvas, texture, mesh };
@@ -207,6 +276,11 @@ export class RailwayWorld {
   }
 
   private createLighting(quality: TrainQuality): void {
+    const environment = this.trackResource(createSkyEnvironmentTexture());
+    environment.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
+    this.scene.environment = environment;
+    this.scene.environmentIntensity = quality === 'low' ? 0.64 : 0.78;
+
     const hemisphere = new THREE.HemisphereLight(0xcce9ff, 0x567246, 2.2);
     this.scene.add(hemisphere);
     const sun = new THREE.DirectionalLight(0xfff3ce, quality === 'low' ? 2.4 : 3.2);
@@ -220,6 +294,7 @@ export class RailwayWorld {
     sun.shadow.camera.near = 0.5;
     sun.shadow.camera.far = 55;
     sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.018;
     this.scene.add(sun);
     this.stationGlow.position.set(0, 4, 32);
     this.scene.add(this.stationGlow);
@@ -359,55 +434,166 @@ export class RailwayWorld {
   }
 
   private createTrack(quality: TrainQuality): void {
-    const ballastMaterial = this.trackResource(new THREE.MeshStandardMaterial({ color: 0x71675a, roughness: 1 }));
-    const railMaterial = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xaeb7bb, roughness: 0.27, metalness: 0.88 }));
-    const sleeperMaterial = this.trackResource(new THREE.MeshStandardMaterial({ color: 0x5f4a38, roughness: 0.92 }));
+    const ballastTexture = this.trackResource(createBallastTexture());
+    ballastTexture.anisotropy = Math.min(4, this.renderer.capabilities.getMaxAnisotropy());
+    const ballastMaterial = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xb0ada4,
+      map: ballastTexture,
+      roughness: 0.98,
+      metalness: 0,
+    }));
+    const railTopMaterial = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xb9c2c4,
+      roughness: 0.23,
+      metalness: 0.92,
+      envMapIntensity: 0.9,
+    }));
+    const railSideMaterial = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0x596367,
+      roughness: 0.43,
+      metalness: 0.84,
+      envMapIntensity: 0.62,
+    }));
+    const sleeperMaterial = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xa29f96,
+      roughness: 0.92,
+      metalness: 0,
+    }));
+    const padMaterial = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0x292e2f,
+      roughness: 0.72,
+      metalness: 0.2,
+    }));
     const ballast = new THREE.Mesh(
-      this.trackResource(new THREE.TubeGeometry(this.curve, quality === 'low' ? 90 : 160, 0.56, 10, false)),
+      this.trackResource(new THREE.TubeGeometry(this.curve, quality === 'low' ? 100 : 190, 0.62, 10, false)),
       ballastMaterial,
     );
-    ballast.scale.y = 0.26;
-    ballast.position.y = -0.03;
+    ballast.scale.y = 0.17;
+    ballast.position.y = -0.095;
     ballast.receiveShadow = true;
     this.scene.add(ballast);
 
     const gauge = 0.31;
-    for (const side of [-1, 1]) {
-      const rail = new THREE.Mesh(
-        this.trackResource(new THREE.TubeGeometry(offsetCurve(this.curve, gauge * side), quality === 'low' ? 100 : 190, 0.025, 8, false)),
-        railMaterial,
-      );
-      rail.castShadow = true;
-      this.scene.add(rail);
+    const railSegments = quality === 'low' ? 110 : 210;
+    const railRadialSegments = quality === 'low' ? 5 : 7;
+    for (const side of [-1, 1] as const) {
+      const railParts = [
+        { height: 0.036, radius: 0.037, material: railSideMaterial },
+        { height: 0.066, radius: 0.014, material: railSideMaterial },
+        { height: 0.086, radius: 0.027, material: railTopMaterial },
+      ];
+      for (const part of railParts) {
+        const rail = new THREE.Mesh(
+          this.trackResource(new THREE.TubeGeometry(
+            offsetCurve(this.curve, gauge * side, part.height),
+            railSegments,
+            part.radius,
+            railRadialSegments,
+            false,
+          )),
+          part.material,
+        );
+        rail.castShadow = quality !== 'low';
+        rail.receiveShadow = true;
+        this.scene.add(rail);
+      }
     }
 
-    const sleeperCount = quality === 'low' ? 74 : 112;
-    const sleeperGeometry = this.trackResource(new THREE.BoxGeometry(1.05, 0.06, 0.12));
+    const sleeperCount = quality === 'high' ? 320 : quality === 'balanced' ? 240 : 132;
+    const sleeperGeometry = this.trackResource(new THREE.BoxGeometry(1.08, 0.055, 0.115));
     const sleepers = new THREE.InstancedMesh(sleeperGeometry, sleeperMaterial, sleeperCount);
+    const pads = new THREE.InstancedMesh(
+      this.trackResource(new THREE.BoxGeometry(0.14, 0.025, 0.098)),
+      padMaterial,
+      sleeperCount * 2,
+    );
     const dummy = new THREE.Object3D();
     const tangent = new THREE.Vector3();
+    const normal = new THREE.Vector3();
     for (let index = 0; index < sleeperCount; index += 1) {
       const amount = index / (sleeperCount - 1);
       const point = this.curve.getPointAt(amount);
       this.curve.getTangentAt(amount, tangent).normalize();
+      normal.set(-tangent.z, 0, tangent.x).normalize();
       dummy.position.copy(point);
-      dummy.position.y -= 0.015;
+      dummy.position.y += 0.024;
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(1, 1, 1);
       dummy.quaternion.setFromUnitVectors(FORWARD, tangent);
       dummy.updateMatrix();
       sleepers.setMatrixAt(index, dummy.matrix);
+      for (const side of [-1, 1] as const) {
+        dummy.position.copy(point).addScaledVector(normal, gauge * side);
+        dummy.position.y += 0.058;
+        dummy.updateMatrix();
+        pads.setMatrixAt(index * 2 + (side === 1 ? 1 : 0), dummy.matrix);
+      }
     }
     sleepers.receiveShadow = true;
-    this.scene.add(sleepers);
+    sleepers.castShadow = quality === 'high';
+    pads.castShadow = quality === 'high';
+    pads.receiveShadow = true;
+    this.scene.add(sleepers, pads);
+
+    const random = seededRandom(2350912);
+    const stoneCount = quality === 'high' ? 520 : quality === 'balanced' ? 340 : 180;
+    const stoneGeometry = this.trackResource(new THREE.DodecahedronGeometry(0.034, 0));
+    const stoneMaterial = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.96,
+      metalness: 0,
+    }));
+    const stones = new THREE.InstancedMesh(stoneGeometry, stoneMaterial, stoneCount);
+    const stonePalette = [
+      new THREE.Color(0x545856),
+      new THREE.Color(0x797870),
+      new THREE.Color(0x969188),
+      new THREE.Color(0x656763),
+      new THREE.Color(0xaaa398),
+    ];
+    for (let index = 0; index < stoneCount; index += 1) {
+      const amount = random();
+      const point = this.curve.getPointAt(amount);
+      this.curve.getTangentAt(amount, tangent).normalize();
+      normal.set(-tangent.z, 0, tangent.x).normalize();
+      dummy.position.copy(point).addScaledVector(normal, (random() - 0.5) * 1.08);
+      dummy.position.y += 0.014 + random() * 0.03;
+      dummy.rotation.set(random() * Math.PI, random() * Math.PI, random() * Math.PI);
+      const scale = 0.55 + random() * 1.25;
+      dummy.scale.set(scale * (0.72 + random() * 0.65), scale * 0.62, scale);
+      dummy.updateMatrix();
+      stones.setMatrixAt(index, dummy.matrix);
+      stones.setColorAt(index, stonePalette[Math.floor(random() * stonePalette.length)]);
+    }
+    stones.instanceColor!.needsUpdate = true;
+    stones.castShadow = quality === 'high';
+    stones.receiveShadow = true;
+    this.scene.add(stones);
   }
 
   private createCatenary(quality: TrainQuality): void {
     if (quality === 'low') return;
-    const metal = this.trackResource(new THREE.MeshStandardMaterial({ color: 0x67777c, roughness: 0.6, metalness: 0.72 }));
+    const metal = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0x59696e,
+      roughness: 0.53,
+      metalness: 0.76,
+    }));
+    const concrete = this.trackResource(new THREE.MeshStandardMaterial({ color: 0x939996, roughness: 0.94 }));
+    const ceramic = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xc7d2ce,
+      roughness: 0.3,
+      metalness: 0.08,
+    }));
     const poleGeometry = this.trackResource(new THREE.CylinderGeometry(0.035, 0.05, 3.2, 8));
     const armGeometry = this.trackResource(new THREE.BoxGeometry(1.55, 0.045, 0.045));
+    const baseGeometry = this.trackResource(new THREE.CylinderGeometry(0.12, 0.14, 0.18, 8));
+    const insulatorGeometry = this.trackResource(new THREE.CylinderGeometry(0.032, 0.032, 0.18, 10));
+    insulatorGeometry.rotateZ(Math.PI / 2);
     const poleCount = quality === 'high' ? 19 : 14;
     const poles = new THREE.InstancedMesh(poleGeometry, metal, poleCount);
     const arms = new THREE.InstancedMesh(armGeometry, metal, poleCount);
+    const bases = new THREE.InstancedMesh(baseGeometry, concrete, poleCount);
+    const insulators = new THREE.InstancedMesh(insulatorGeometry, ceramic, poleCount);
     const baseMatrix = new THREE.Matrix4();
     const localMatrix = new THREE.Matrix4();
     const worldMatrix = new THREE.Matrix4();
@@ -424,26 +610,44 @@ export class RailwayWorld {
       position.addScaledVector(normal, 1.05);
       quaternion.setFromUnitVectors(FORWARD, tangent);
       baseMatrix.compose(position, quaternion, scale);
+      localMatrix.makeTranslation(0, 0.09, 0);
+      worldMatrix.multiplyMatrices(baseMatrix, localMatrix);
+      bases.setMatrixAt(index, worldMatrix);
       localMatrix.makeTranslation(0, 1.58, 0);
       worldMatrix.multiplyMatrices(baseMatrix, localMatrix);
       poles.setMatrixAt(index, worldMatrix);
-      localMatrix.makeTranslation(-0.72, 3.05, 0);
+      // Local +X points from the lineside pole back toward the track centre.
+      // Keep the cantilever and insulator over the contact wire, not outside
+      // the railway corridor.
+      localMatrix.makeTranslation(0.72, 3.05, 0);
       worldMatrix.multiplyMatrices(baseMatrix, localMatrix);
       arms.setMatrixAt(index, worldMatrix);
+      localMatrix.makeTranslation(0.63, 3.035, 0);
+      worldMatrix.multiplyMatrices(baseMatrix, localMatrix);
+      insulators.setMatrixAt(index, worldMatrix);
     }
     poles.castShadow = quality === 'high';
     arms.castShadow = quality === 'high';
-    this.scene.add(poles, arms);
+    bases.castShadow = quality === 'high';
+    bases.receiveShadow = true;
+    insulators.castShadow = quality === 'high';
+    this.scene.add(bases, poles, arms, insulators);
 
     const contactPoints: THREE.Vector3[] = [];
     const messengerPoints: THREE.Vector3[] = [];
-    for (let index = 0; index <= 80; index += 1) {
-      const amount = index / 80;
+    const wireDivisions = quality === 'high' ? 120 : 90;
+    for (let index = 0; index <= wireDivisions; index += 1) {
+      const amount = index / wireDivisions;
       const contact = this.curve.getPointAt(amount);
+      this.curve.getTangentAt(amount, tangent).normalize();
+      normal.set(-tangent.z, 0, tangent.x).normalize();
+      const spanPhase = (amount - 0.03) / 0.94 * (poleCount - 1);
+      const stagger = Math.cos(spanPhase * Math.PI) * 0.042;
+      contact.addScaledVector(normal, stagger);
       contact.y += 2.86;
       contactPoints.push(contact);
       const messenger = contact.clone();
-      messenger.y += 0.23 + Math.sin(amount * Math.PI * poleCount) * 0.045;
+      messenger.y += 0.24 + Math.cos(spanPhase * Math.PI * 2) * 0.045;
       messengerPoints.push(messenger);
     }
     const wireMaterial = this.trackResource(new THREE.MeshBasicMaterial({ color: 0x394e56 }));
@@ -455,7 +659,27 @@ export class RailwayWorld {
       this.trackResource(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(messengerPoints), 180, 0.006, 5, false)),
       wireMaterial,
     );
-    this.scene.add(contactWire, messengerWire);
+    const dropperCount = (poleCount - 1) * 3;
+    const dropperGeometry = this.trackResource(new THREE.CylinderGeometry(0.004, 0.004, 1, 5));
+    const droppers = new THREE.InstancedMesh(dropperGeometry, wireMaterial, dropperCount);
+    const dropperDummy = new THREE.Object3D();
+    for (let index = 0; index < dropperCount; index += 1) {
+      const amount = 0.035 + index / Math.max(1, dropperCount - 1) * 0.93;
+      const contact = this.curve.getPointAt(amount);
+      this.curve.getTangentAt(amount, tangent).normalize();
+      normal.set(-tangent.z, 0, tangent.x).normalize();
+      const spanPhase = (amount - 0.03) / 0.94 * (poleCount - 1);
+      contact.addScaledVector(normal, Math.cos(spanPhase * Math.PI) * 0.042);
+      contact.y += 2.86;
+      const dropperHeight = 0.24 + Math.cos(spanPhase * Math.PI * 2) * 0.045;
+      dropperDummy.position.copy(contact);
+      dropperDummy.position.y += dropperHeight * 0.5;
+      dropperDummy.rotation.set(0, 0, 0);
+      dropperDummy.scale.set(1, dropperHeight, 1);
+      dropperDummy.updateMatrix();
+      droppers.setMatrixAt(index, dropperDummy.matrix);
+    }
+    this.scene.add(contactWire, messengerWire, droppers);
   }
 
   private createScenicDetails(quality: TrainQuality): void {
@@ -519,16 +743,49 @@ export class RailwayWorld {
   }
 
   private createStations(quality: TrainQuality): void {
-    const concrete = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xc9c5b6, roughness: 0.9 }));
-    const canopy = this.trackResource(new THREE.MeshStandardMaterial({ color: 0x1b6083, roughness: 0.45, metalness: 0.28 }));
-    const cream = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xeee1b9, roughness: 0.78 }));
-    const coral = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xe5634c, roughness: 0.56 }));
+    const concrete = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xbcbab1, roughness: 0.92 }));
+    const darkConcrete = this.trackResource(new THREE.MeshStandardMaterial({ color: 0x747a78, roughness: 0.92 }));
+    const canopy = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0x195c7a,
+      roughness: 0.42,
+      metalness: 0.32,
+    }));
+    const cream = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xe6ddc2, roughness: 0.8 }));
+    const trim = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xe9ece7,
+      roughness: 0.48,
+      metalness: 0.38,
+    }));
+    const roofTile = this.trackResource(new THREE.MeshStandardMaterial({
+      color: 0xb95649,
+      roughness: 0.52,
+      metalness: 0.14,
+    }));
+    const tactileMaterial = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xe8bd45, roughness: 0.7 }));
+    const safetyLineMaterial = this.trackResource(new THREE.MeshStandardMaterial({ color: 0xf2f0df, roughness: 0.72 }));
+    const stationGlass = this.trackResource(new THREE.MeshPhysicalMaterial({
+      color: 0x214c5e,
+      roughness: 0.14,
+      metalness: 0.08,
+      transmission: quality === 'high' ? 0.12 : 0,
+      transparent: true,
+      opacity: 0.88,
+      emissive: 0x123145,
+      emissiveIntensity: 0.2,
+      envMapIntensity: 0.86,
+    }));
 
     const departureRoot = new THREE.Group();
     const departurePlatform = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(2.1, 0.18, 8.5)), concrete);
     departurePlatform.position.y = 0.05;
     departurePlatform.receiveShadow = true;
-    departureRoot.add(departurePlatform);
+    const departureFascia = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.055, 0.24, 8.5)), canopy);
+    departureFascia.position.set(1.04, 0.01, 0);
+    const departureAccent = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.063, 0.055, 8.3)), cream);
+    departureAccent.position.set(1.075, 0.055, 0);
+    const departureTactile = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.13, 0.035, 8.25)), tactileMaterial);
+    departureTactile.position.set(0.91, 0.16, 0);
+    departureRoot.add(departurePlatform, departureFascia, departureAccent, departureTactile);
     this.departureDisplay.mesh.position.set(0, 1.25, 1.1);
     this.departureDisplay.mesh.rotation.y = -Math.PI / 2;
     departureRoot.add(this.departureDisplay.mesh);
@@ -539,51 +796,184 @@ export class RailwayWorld {
     platform.position.set(-1.22, 0.02, 0);
     platform.receiveShadow = true;
     this.stationRoot.add(platform);
+    const platformFascia = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.06, 0.25, 10.5)), canopy);
+    platformFascia.position.set(-0.035, -0.005, 0);
+    const platformAccent = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.068, 0.055, 10.25)), cream);
+    platformAccent.position.set(-0.002, 0.045, 0);
+    const safetyLine = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.045, 0.025, 10.1)), safetyLineMaterial);
+    safetyLine.position.set(-0.28, 0.143, 0);
+    this.stationRoot.add(platformFascia, platformAccent, safetyLine);
     const tactileEdge = new THREE.Mesh(
       this.trackResource(new THREE.BoxGeometry(0.13, 0.045, 10.2)),
-      this.trackResource(new THREE.MeshStandardMaterial({ color: 0xf0c655, roughness: 0.7 })),
+      tactileMaterial,
     );
     tactileEdge.position.set(-0.08, 0.145, 0);
     this.stationRoot.add(tactileEdge);
+    // Keep the architecture close to the stopping point and station board.
+    // Grouping the complete building preserves every facade detail while
+    // allowing the camera to stay intimate with the train on arrival.
+    const stationBuildingRoot = new THREE.Group();
+    stationBuildingRoot.position.x = 1.5;
+    stationBuildingRoot.position.z = -2;
     const stationBody = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(3.5, 2.2, 3.6)), cream);
     stationBody.position.set(-2.55, 1.18, 1.1);
     stationBody.castShadow = true;
-    const roof = new THREE.Mesh(this.trackResource(new THREE.ConeGeometry(2.8, 1.35, 4)), coral);
-    roof.position.set(-2.55, 2.92, 1.1);
-    roof.rotation.y = Math.PI / 4;
+    stationBody.receiveShadow = true;
+    const plinth = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(3.58, 0.34, 3.68)), darkConcrete);
+    plinth.position.set(-2.55, 0.26, 1.1);
+    const wallBand = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.055, 0.16, 3.45)), canopy);
+    wallBand.position.set(-0.775, 0.56, 1.1);
+    const tracksideWallBand = new THREE.Mesh(wallBand.geometry, canopy);
+    tracksideWallBand.position.set(-4.325, 0.56, 1.1);
+
+    const roofProfile = new THREE.Shape();
+    roofProfile.moveTo(-2.08, 0);
+    roofProfile.lineTo(0, 0.88);
+    roofProfile.lineTo(2.08, 0);
+    roofProfile.lineTo(1.97, -0.11);
+    roofProfile.lineTo(0, 0.68);
+    roofProfile.lineTo(-1.97, -0.11);
+    roofProfile.closePath();
+    const roof = new THREE.Mesh(
+      this.trackResource(new THREE.ExtrudeGeometry(roofProfile, {
+        depth: 4.18,
+        bevelEnabled: true,
+        bevelThickness: 0.025,
+        bevelSize: 0.025,
+        bevelSegments: 1,
+        curveSegments: 1,
+      })),
+      roofTile,
+    );
+    roof.position.set(-2.55, 2.37, -0.99);
     roof.castShadow = true;
-    this.stationRoot.add(stationBody, roof);
-    const stationGlass = this.trackResource(new THREE.MeshStandardMaterial({
-      color: 0x173d52,
-      roughness: 0.2,
-      metalness: 0.18,
-      emissive: 0x123145,
-      emissiveIntensity: 0.24,
-    }));
-    for (const z of [0.15, 1.35, 2.05]) {
-      const window = new THREE.Mesh(
-        this.trackResource(new THREE.BoxGeometry(0.035, 0.58, z === 2.05 ? 0.52 : 0.74)),
-        stationGlass,
-      );
-      window.position.set(-0.79, 1.25, z);
-      this.stationRoot.add(window);
-    }
-    const canopyRoof = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(1.75, 0.12, 5.2)), canopy);
-    canopyRoof.position.set(-0.98, 1.78, -1.1);
+    roof.receiveShadow = true;
+    const gutterGeometry = this.trackResource(new THREE.BoxGeometry(0.09, 0.11, 4.3));
+    const tracksideGutter = new THREE.Mesh(gutterGeometry, trim);
+    tracksideGutter.position.set(-0.5, 2.33, 1.1);
+    const rearGutter = new THREE.Mesh(gutterGeometry, trim);
+    rearGutter.position.set(-4.6, 2.33, 1.1);
+    stationBuildingRoot.add(
+      stationBody,
+      plinth,
+      wallBand,
+      tracksideWallBand,
+      roof,
+      tracksideGutter,
+      rearGutter,
+    );
+
+    const openingGeometry = this.trackResource(new THREE.BoxGeometry(0.032, 1, 1));
+    const openings = [
+      { y: 1.22, z: -0.12, height: 0.82, width: 0.72, door: false },
+      { y: 1.02, z: 1.1, height: 1.46, width: 1.12, door: true },
+      { y: 1.22, z: 2.35, height: 0.82, width: 0.68, door: false },
+    ];
+    const facadeXs = [-0.785, -4.315] as const;
+    const glassPanels = new THREE.InstancedMesh(
+      openingGeometry,
+      stationGlass,
+      openings.length * facadeXs.length,
+    );
+    const frameGeometry = this.trackResource(new THREE.BoxGeometry(0.04, 1, 1));
+    const framePieces = new THREE.InstancedMesh(frameGeometry, trim, 36);
+    const detailDummy = new THREE.Object3D();
+    let frameIndex = 0;
+    const addFramePiece = (
+      x: number,
+      y: number,
+      z: number,
+      height: number,
+      width: number,
+    ): void => {
+      detailDummy.position.set(x, y, z);
+      detailDummy.rotation.set(0, 0, 0);
+      detailDummy.scale.set(1, height, width);
+      detailDummy.updateMatrix();
+      framePieces.setMatrixAt(frameIndex, detailDummy.matrix);
+      frameIndex += 1;
+    };
+    openings.forEach((opening, openingIndex) => {
+      facadeXs.forEach((facadeX, facadeIndex) => {
+        const outward = facadeIndex === 0 ? 1 : -1;
+        const frameX = facadeX + outward * 0.02;
+        detailDummy.position.set(facadeX, opening.y, opening.z);
+        detailDummy.scale.set(1, opening.height, opening.width);
+        detailDummy.updateMatrix();
+        glassPanels.setMatrixAt(openingIndex * facadeXs.length + facadeIndex, detailDummy.matrix);
+        addFramePiece(frameX, opening.y, opening.z - opening.width * 0.5, opening.height + 0.1, 0.045);
+        addFramePiece(frameX, opening.y, opening.z + opening.width * 0.5, opening.height + 0.1, 0.045);
+        addFramePiece(frameX, opening.y - opening.height * 0.5, opening.z, 0.045, opening.width + 0.1);
+        addFramePiece(frameX, opening.y + opening.height * 0.5, opening.z, 0.045, opening.width + 0.1);
+        if (opening.door) addFramePiece(frameX, opening.y, opening.z, opening.height, 0.035);
+        else addFramePiece(frameX, opening.y, opening.z, 0.035, opening.width);
+      });
+    });
+    framePieces.count = frameIndex;
+    glassPanels.castShadow = false;
+    stationBuildingRoot.add(glassPanels, framePieces);
+
+    const canopyRoof = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(1.82, 0.12, 5.8)), canopy);
+    canopyRoof.position.set(-0.92, 1.9, -0.72);
+    canopyRoof.rotation.z = -0.025;
     canopyRoof.castShadow = true;
+    canopyRoof.receiveShadow = true;
     this.stationRoot.add(canopyRoof);
-    const postGeometry = this.trackResource(new THREE.CylinderGeometry(0.035, 0.045, 1.75, 8));
-    for (const z of [-3.1, -1.25, 0.62]) {
-      const post = new THREE.Mesh(postGeometry, canopy);
-      post.position.set(-1.52, 0.88, z);
-      this.stationRoot.add(post);
+    const postGeometry = this.trackResource(new THREE.CylinderGeometry(0.035, 0.047, 1.82, 8));
+    const canopyPosts = new THREE.InstancedMesh(postGeometry, canopy, 4);
+    for (const [index, z] of [-3.25, -1.58, 0.08, 1.75].entries()) {
+      detailDummy.position.set(-1.53, 0.92, z);
+      detailDummy.rotation.set(0, 0, 0);
+      detailDummy.scale.set(1, 1, 1);
+      detailDummy.updateMatrix();
+      canopyPosts.setMatrixAt(index, detailDummy.matrix);
     }
+    const ribGeometry = this.trackResource(new THREE.BoxGeometry(1.78, 0.055, 0.07));
+    const canopyRibs = new THREE.InstancedMesh(ribGeometry, trim, 7);
+    for (let index = 0; index < 7; index += 1) {
+      detailDummy.position.set(-0.93, 1.815, -3.35 + index * 0.88);
+      detailDummy.updateMatrix();
+      canopyRibs.setMatrixAt(index, detailDummy.matrix);
+    }
+    canopyPosts.castShadow = quality === 'high';
+    canopyRibs.castShadow = quality === 'high';
+    this.stationRoot.add(canopyPosts, canopyRibs);
+
+    const benchSeatGeometry = this.trackResource(new THREE.BoxGeometry(0.48, 0.075, 1.08));
+    const benchBackGeometry = this.trackResource(new THREE.BoxGeometry(0.075, 0.46, 1.08));
+    const benches = new THREE.InstancedMesh(benchSeatGeometry, canopy, 2);
+    const benchBacks = new THREE.InstancedMesh(benchBackGeometry, canopy, 2);
+    for (const [index, z] of [-1.45, 0.45].entries()) {
+      detailDummy.position.set(-0.5, 0.58, z);
+      detailDummy.updateMatrix();
+      benches.setMatrixAt(index, detailDummy.matrix);
+      detailDummy.position.set(-0.71, 0.79, z);
+      detailDummy.updateMatrix();
+      benchBacks.setMatrixAt(index, detailDummy.matrix);
+    }
+    const noticeFrame = new THREE.Mesh(this.trackResource(new THREE.BoxGeometry(0.055, 0.78, 0.55)), trim);
+    noticeFrame.position.set(-4.35, 1.25, 1.89);
+    const noticePanel = new THREE.Mesh(
+      this.trackResource(new THREE.BoxGeometry(0.064, 0.65, 0.43)),
+      this.trackResource(new THREE.MeshStandardMaterial({ color: 0xe3d9ad, roughness: 0.72 })),
+    );
+    noticePanel.position.set(-4.386, 1.25, 1.89);
+    const equipmentBox = new THREE.Mesh(
+      this.trackResource(new THREE.BoxGeometry(0.72, 1.18, 0.55)),
+      this.trackResource(new THREE.MeshStandardMaterial({ color: 0xd5d9d5, roughness: 0.54, metalness: 0.28 })),
+    );
+    equipmentBox.position.set(-4.02, 0.69, -0.88);
+    this.stationRoot.add(benches, benchBacks);
+    stationBuildingRoot.add(noticeFrame, noticePanel, equipmentBox);
+    this.stationRoot.add(stationBuildingRoot);
+
     // Bring the platform sign close to the stopping point. This lets the final
     // portrait shot stay intimate with the cab while still reading the whole
     // station name, instead of pulling the camera so far back that the train
     // becomes a miniature.
-    this.stationDisplay.mesh.position.set(-0.72, 2.35, -3.1);
+    this.stationDisplay.mesh.position.set(-4, 2.2, -2);
     this.stationDisplay.mesh.rotation.y = -Math.PI / 2;
+    this.stationDisplay.mesh.scale.setScalar(0.72);
     this.stationRoot.add(this.stationDisplay.mesh);
 
     const gateColumnGeometry = this.trackResource(new THREE.BoxGeometry(0.13, 2.55, 0.13));
@@ -602,9 +992,9 @@ export class RailwayWorld {
       this.trackResource(new THREE.CircleGeometry(0.36, 32)),
       this.trackResource(new THREE.MeshBasicMaterial({ color: 0xfff9df, toneMapped: false })),
     );
-    clockFace.position.set(-0.78, 2.05, 1.1);
-    clockFace.rotation.y = Math.PI / 2;
-    this.stationRoot.add(clockFace);
+    clockFace.position.set(-4.32, 2.05, 1.1);
+    clockFace.rotation.y = -Math.PI / 2;
+    stationBuildingRoot.add(clockFace);
 
     const balloonGeometry = this.trackResource(new THREE.SphereGeometry(0.18, quality === 'high' ? 16 : 10, quality === 'high' ? 12 : 8));
     const balloonColors = [0xe76550, 0xf0c655, 0x2f8ab4, 0x6db783];
@@ -623,11 +1013,14 @@ export class RailwayWorld {
     }
     const lampMaterial = this.trackResource(new THREE.MeshBasicMaterial({ color: 0xffe9a8, toneMapped: false }));
     const lampGeometry = this.trackResource(new THREE.SphereGeometry(0.09, 10, 8));
-    for (const z of [-3.6, -2.2, -0.8, 0.6, 2, 3.4]) {
-      const lamp = new THREE.Mesh(lampGeometry, lampMaterial);
-      lamp.position.set(-0.45, 2.02, z);
-      this.stationRoot.add(lamp);
+    const platformLamps = new THREE.InstancedMesh(lampGeometry, lampMaterial, 6);
+    for (const [index, z] of [-3.35, -2.3, -1.25, -0.2, 0.85, 1.9].entries()) {
+      detailDummy.position.set(-0.48, 1.76, z);
+      detailDummy.scale.set(1, 0.5, 1.5);
+      detailDummy.updateMatrix();
+      platformLamps.setMatrixAt(index, detailDummy.matrix);
     }
+    this.stationRoot.add(platformLamps);
     placeAlongCurve(this.stationRoot, this.curve, BIRTHDAY_STATION_RAIL, -1.82, 0);
     this.stationRoot.updateMatrixWorld(true);
     this.stationRoot.getWorldPosition(this.stationGlow.position);
@@ -685,7 +1078,10 @@ export class RailwayWorld {
       );
       const carPoint = this.curve.getPointAt(carAmount, this.carPoints[index]);
       const carTangent = this.curve.getTangentAt(carAmount, this.carTangents[index]).normalize();
-      carPoint.y += 0.22;
+      // The wheel bottom sits 0.008 units below each car origin. With the rail
+      // head topping out near 0.113, a 0.102 lift gives a slight, stable visual
+      // overlap instead of the old 0.1-unit air gap.
+      carPoint.y += 0.102;
       this.carQuaternions[index].setFromUnitVectors(FORWARD, carTangent);
       this.formation.setCarPose(index, carPoint, this.carQuaternions[index]);
     });
@@ -705,6 +1101,7 @@ export class RailwayWorld {
       this.curve.getPointAt(BIRTHDAY_STATION_RAIL, this.scratchStationPoint);
       this.lookTarget.lerp(this.scratchStationPoint, rig.stationBlend);
     }
+    this.lookTarget.addScaledVector(normal, rig.targetLateral);
     this.lookTarget.y += rig.targetHeight;
     if (!this.running) {
       this.camera.position.copy(this.desiredCamera);
