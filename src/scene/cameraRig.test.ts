@@ -89,6 +89,24 @@ describe('calculateCameraRig', () => {
     }
   });
 
+  it('撮影ブレンドは境界で速度と加速度が連続する', () => {
+    const keys = ['departureBlend', 'approachBlend', 'stationBlend'] as const;
+    const step = 1e-5;
+    for (const boundary of [0.28, 0.58, 0.82]) {
+      for (const key of keys) {
+        const samples = [-2, -1, 0, 1, 2].map((offset) => (
+          calculateCameraRig(boundary + offset * step)[key]
+        ));
+        const leftVelocity = (samples[2] - samples[1]) / step;
+        const rightVelocity = (samples[3] - samples[2]) / step;
+        const leftAcceleration = (samples[2] - 2 * samples[1] + samples[0]) / (step * step);
+        const rightAcceleration = (samples[4] - 2 * samples[3] + samples[2]) / (step * step);
+        expect(Math.abs(leftVelocity - rightVelocity)).toBeLessThan(0.001);
+        expect(Math.abs(leftAcceleration - rightAcceleration)).toBeLessThan(0.1);
+      }
+    }
+  });
+
   it('範囲外の進捗を安全に端点へ丸める', () => {
     expect(calculateCameraRig(-2)).toEqual(calculateCameraRig(0));
     expect(calculateCameraRig(8)).toEqual(calculateCameraRig(1));

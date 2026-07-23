@@ -1,6 +1,7 @@
 import { gsap } from 'gsap';
 import './style.css';
 import { JourneyAudio } from './audio';
+import { sampleJourneyMotion } from './motion';
 import {
   calculateCountdown,
   createRidePlan,
@@ -88,6 +89,7 @@ const destinationName = required<HTMLElement>('#destinationName');
 const proximity = required<HTMLElement>('#proximityMessage');
 const journeyFill = required<HTMLElement>('#journeyFill');
 const journeyTrainIcon = required<HTMLElement>('#journeyTrainIcon');
+const journeyTrack = required<HTMLElement>('.journey-track');
 const stationPass = required<HTMLElement>('#stationPass');
 const journeyStatus = required<HTMLElement>('#journeyStatus');
 const departLabel = required<HTMLElement>('#departLabel');
@@ -140,6 +142,20 @@ app.dataset.experienceState = experienceState;
 let activeTimeline: gsap.core.Timeline | null = null;
 let arrivalTimer: number | null = null;
 let currentPlan: RidePlan = createRidePlan(countdown, parseRideMemory(safeStorageGet(RIDE_KEY)));
+let displayedProgress = 0;
+let journeyTrackTravel = 0;
+
+function updateJourneyHud(progress: number): void {
+  displayedProgress = Math.min(1, Math.max(0, progress));
+  journeyFill.style.setProperty('--journey-progress', String(displayedProgress));
+  journeyTrainIcon.style.setProperty('--journey-train-x', `${displayedProgress * journeyTrackTravel}px`);
+}
+
+function measureJourneyTrack(): void {
+  // Read layout only at initialization/resize, never inside an animation tick.
+  journeyTrackTravel = journeyTrack.clientWidth * 0.92;
+  updateJourneyHud(displayedProgress);
+}
 
 function showStation(days: number, departure: boolean): void {
   stationKicker.textContent = departure ? 'きのうの えきから' : 'きょうの えきに とうちゃく';
@@ -163,8 +179,7 @@ function preparePlan(plan: RidePlan): void {
   controlHint.textContent = plan.isReplay
     ? 'なんどでも おなじ たびを みられるよ'
     : plan.isCatchUp ? 'とちゅうの えきを とおって きょうに おいつくよ' : 'おすと、のこりにっすうが 1つ へるよ';
-  journeyFill.style.width = '0%';
-  journeyTrainIcon.style.left = '0%';
+  updateJourneyHud(0);
   stationPass.textContent = '';
   world?.setStations(plan.fromDays, plan.toDays);
   world?.setProgress(0);
@@ -203,8 +218,7 @@ function completeJourney(): void {
   showStation(currentPlan.toDays, false);
   destinationName.textContent = stationLabel(currentPlan.toDays);
   stationPass.textContent = currentPlan.toDays === 0 ? 'たんじょうびえき！' : `${stationLabel(currentPlan.toDays)} とうちゃく！`;
-  journeyFill.style.width = '100%';
-  journeyTrainIcon.style.left = '92%';
+  updateJourneyHud(1);
   setStatus(currentPlan.toDays === 0 ? 'たんじょうびえきに とうちゃくしました' : `${stationLabel(currentPlan.toDays)}に とうちゃくしました`);
   arrivalStationName.textContent = stationLabel(currentPlan.toDays);
   arrivalMessage.textContent = currentPlan.toDays === 0
@@ -259,67 +273,46 @@ async function runJourney(): Promise<void> {
   await audio.unlock().catch(() => undefined);
   const duration = reducedMotion ? 0.65 : 13.8;
   audio.playDeparture(duration);
-  const motion = { progress: 0 };
+  const motion = { time: 0 };
   const lastPassIndex = { value: -1 };
+  let statusStage = 0;
+  const journeyDistance = world?.getJourneyDistance() ?? 0;
   setStatus('しんごうが あおに なりました');
 
   activeTimeline?.kill();
   if (reducedMotion) {
     activeTimeline = gsap.timeline({ onComplete: completeJourney })
       .call(() => {
-        motion.progress = 1;
+        motion.time = 1;
         world?.setProgress(1);
         world?.setMotion(false, 0);
-        journeyFill.style.width = '100%';
-        journeyTrainIcon.style.left = '92%';
+        updateJourneyHud(1);
         setStatus(`${stationLabel(currentPlan.toDays)}に もうすぐ とうちゃく`);
       })
       .to({}, { duration });
     return;
   }
-  activeTimeline = gsap.timeline({
-    onComplete: completeJourney,
-  });
-  activeTimeline
+  activeTimeline = gsap.timeline({ onComplete: completeJourney })
     .to(motion, {
-      progress: 0.12,
-      duration: duration * 0.2,
-      ease: 'power2.in',
+      time: 1,
+      duration,
+      ease: 'none',
       onStart: () => setStatus('E235けい しゅっぱつ！'),
       onUpdate: () => {
-        const speed = Math.sin(Math.PI * motion.progress) * 24;
-        world?.setProgress(motion.progress);
+        const sample = sampleJourneyMotion(motion.time);
+        const speed = journeyDistance * sample.normalizedVelocity / duration;
+        world?.setProgress(sample.progress);
         world?.setMotion(true, speed);
-        journeyFill.style.width = `${motion.progress * 100}%`;
-        journeyTrainIcon.style.left = `${motion.progress * 92}%`;
-      },
-    })
-    .to(motion, {
-      progress: 0.7,
-      duration: duration * 0.48,
-      ease: 'sine.inOut',
-      onStart: () => setStatus('トンネルを ぬけて、たんじょうびえきへ'),
-      onUpdate: () => {
-        const speed = Math.sin(Math.PI * motion.progress) * 27;
-        world?.setProgress(motion.progress);
-        world?.setMotion(true, speed);
-        journeyFill.style.width = `${motion.progress * 100}%`;
-        journeyTrainIcon.style.left = `${motion.progress * 92}%`;
-        updatePassStations(motion.progress, lastPassIndex);
-      },
-    })
-    .to(motion, {
-      progress: 1,
-      duration: duration * 0.32,
-      ease: 'power2.out',
-      onStart: () => setStatus(`${stationLabel(currentPlan.toDays)}が みえてきたよ`),
-      onUpdate: () => {
-        const speed = Math.max(0.8, (1 - motion.progress) * 28);
-        world?.setProgress(motion.progress);
-        world?.setMotion(true, speed);
-        journeyFill.style.width = `${motion.progress * 100}%`;
-        journeyTrainIcon.style.left = `${motion.progress * 92}%`;
-        updatePassStations(motion.progress, lastPassIndex);
+        updateJourneyHud(sample.progress);
+        updatePassStations(sample.progress, lastPassIndex);
+        if (statusStage < 1 && sample.progress >= 0.12) {
+          statusStage = 1;
+          setStatus('トンネルを ぬけて、たんじょうびえきへ');
+        }
+        if (statusStage < 2 && sample.progress >= 0.7) {
+          statusStage = 2;
+          setStatus(`${stationLabel(currentPlan.toDays)}が みえてきたよ`);
+        }
       },
     });
 }
@@ -340,6 +333,7 @@ function restAtStation(): void {
   departButton.focus({ preventScroll: true });
 }
 
+measureJourneyTrack();
 updateTodayMeta();
 preparePlan(currentPlan);
 const scenePreview = Number(query.get('scene'));
@@ -388,12 +382,17 @@ soundToggle.addEventListener('click', () => {
   soundLabel.textContent = enabled ? 'おと あり' : 'おと なし';
 });
 
-window.addEventListener('resize', () => world?.resize(), { passive: true });
+window.addEventListener('resize', () => {
+  measureJourneyTrack();
+  world?.resize();
+}, { passive: true });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     activeTimeline?.pause();
+    world?.setSuspended(true);
     return;
   }
+  world?.setSuspended(false);
   if (experienceState === 'running') activeTimeline?.resume();
   else if (experienceState === 'ready') refreshJapanDay();
 });

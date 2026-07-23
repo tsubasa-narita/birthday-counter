@@ -18,19 +18,19 @@ function lerp(from: number, to: number, amount: number): number {
   return from + (to - from) * amount;
 }
 
-function smoothstep(min: number, max: number, value: number): number {
+function smootherstep(min: number, max: number, value: number): number {
   const amount = clamp((value - min) / (max - min), 0, 1);
-  return amount * amount * (3 - 2 * amount);
+  return amount * amount * amount * (amount * (amount * 6 - 15) + 10);
 }
 
 export function calculateCameraRig(progress: number): CameraRigSample {
   const normalized = clamp(progress, 0, 1);
-  const departureBlend = smoothstep(0, 0.28, normalized);
-  const approachBlend = smoothstep(0.58, 1, normalized);
+  const departureBlend = smootherstep(0, 0.28, normalized);
+  const approachBlend = smootherstep(0.58, 1, normalized);
   // The station is still far ahead at 60–80% of the route. Looking at it too
   // early pulls the train completely out of a portrait frame, so station
   // focus begins only once the consist is on the final platform approach.
-  const stationFocusBlend = smoothstep(0.82, 1, normalized);
+  const stationFocusBlend = smootherstep(0.82, 1, normalized);
   return {
     departureBlend,
     approachBlend,

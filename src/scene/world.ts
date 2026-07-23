@@ -24,6 +24,18 @@ export interface RailwayWorldOptions {
   reducedMotion: boolean;
 }
 
+function initialPixelRatio(quality: TrainQuality): number {
+  const deviceRatio = window.devicePixelRatio || 1;
+  if (quality === 'low') return Math.min(deviceRatio, 1);
+  if (quality === 'balanced') {
+    // Four-car phone scenes stay crisp at this density while shading about
+    // 23% fewer pixels than the previous 1.35 cap.
+    const cap = window.innerWidth < 700 ? 1.18 : 1.3;
+    return Math.min(deviceRatio, cap);
+  }
+  return Math.min(deviceRatio, 1.7);
+}
+
 function seededRandom(seed: number): () => number {
   let value = seed >>> 0;
   return () => {
@@ -381,10 +393,14 @@ export class RailwayWorld {
   private readonly stationGlow = new THREE.PointLight(0xffd773, 0, 14, 2);
   private readonly festiveDecorations: THREE.Object3D[] = [];
   private readonly reducedMotion: boolean;
+  private readonly quality: TrainQuality;
+  private readonly minimumPixelRatio: number;
   private readonly resources = new Set<THREE.BufferGeometry | THREE.Material | THREE.Texture>();
   private readonly clock = new THREE.Clock();
   private readonly lookTarget = new THREE.Vector3();
   private readonly desiredCamera = new THREE.Vector3();
+  private readonly journeyPoint = new THREE.Vector3();
+  private readonly journeyTangent = new THREE.Vector3();
   private readonly scratchNormal = new THREE.Vector3();
   private readonly scratchDirection = new THREE.Vector3();
   private readonly scratchCameraTarget = new THREE.Vector3();
@@ -396,6 +412,12 @@ export class RailwayWorld {
   private journeyProgress = 0;
   private speed = 0;
   private running = false;
+  private suspended = false;
+  private pixelRatio: number;
+  private frameIntervalAverage = 1000 / 60;
+  private continuousFrameCount = 0;
+  private previousFrameTime = 0;
+  private stationRangeKey = '';
   private disposed = false;
 
   constructor(canvas: HTMLCanvasElement, formation: E235Formation, options: RailwayWorldOptions) {
@@ -405,6 +427,9 @@ export class RailwayWorld {
     this.carTangents = formation.cars.map(() => new THREE.Vector3());
     this.carQuaternions = formation.cars.map(() => new THREE.Quaternion());
     this.reducedMotion = options.reducedMotion;
+    this.quality = options.quality;
+    this.pixelRatio = initialPixelRatio(options.quality);
+    this.minimumPixelRatio = Math.min(this.pixelRatio, options.quality === 'high' ? 1.25 : 1);
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
@@ -412,7 +437,7 @@ export class RailwayWorld {
       powerPreference: 'high-performance',
       stencil: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, options.quality === 'high' ? 1.7 : 1.35));
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.08;
@@ -438,6 +463,10 @@ export class RailwayWorld {
     this.setStations(1, 0);
     this.setProgress(0);
     this.resize();
+    // Prepare every scene material while the loading cover is still visible,
+    // including the station and decorations that enter the frustum later.
+    // This prevents a first-use shader compilation pause during the journey.
+    this.renderer.compile(this.scene, this.camera);
   }
 
   private trackResource<T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(resource: T): T {
@@ -1491,6 +1520,9 @@ export class RailwayWorld {
   }
 
   setStations(fromDays: number, toDays: number): void {
+    const rangeKey = `${fromDays}:${toDays}`;
+    if (this.stationRangeKey === rangeKey) return;
+    this.stationRangeKey = rangeKey;
     paintStationDisplay(this.departureDisplay, fromDays, true);
     paintStationDisplay(this.stationDisplay, toDays, false);
     const close = toDays <= 14;
@@ -1500,14 +1532,21 @@ export class RailwayWorld {
       decoration.visible = index < visibleCount;
     });
     this.stationGlow.intensity = toDays === 0 ? 18 : veryClose ? 10 : toDays <= 7 ? 5 : close ? 2 : 0;
+    this.renderer.shadowMap.needsUpdate = true;
     this.invalidate();
+  }
+
+  getJourneyDistance(): number {
+    return this.curveLength * (JOURNEY_RAIL_END - JOURNEY_RAIL_START);
   }
 
   setProgress(value: number): void {
     this.journeyProgress = THREE.MathUtils.clamp(value, 0, 1);
     const railAmount = THREE.MathUtils.lerp(JOURNEY_RAIL_START, JOURNEY_RAIL_END, this.journeyProgress);
-    const point = this.curve.getPointAt(railAmount);
-    const tangent = this.curve.getTangentAt(railAmount).normalize();
+    // Reuse the leading-car route samples: setProgress runs every animation
+    // tick, so allocating two vectors here would create avoidable GC pressure.
+    const point = this.curve.getPointAt(railAmount, this.journeyPoint);
+    const tangent = this.curve.getTangentAt(railAmount, this.journeyTangent).normalize();
     const normal = this.scratchNormal.set(-tangent.z, 0, tangent.x).normalize();
     this.formation.root.position.set(0, 0, 0);
     this.formation.root.quaternion.identity();
@@ -1592,10 +1631,43 @@ export class RailwayWorld {
     if (this.confetti.life <= 0) this.confetti.points.visible = false;
   }
 
-  private frame = (): void => {
-    if (this.disposed) return;
+  private adaptRenderScale(frameTime: number): void {
+    if (!this.running || this.quality === 'low') {
+      this.previousFrameTime = 0;
+      this.continuousFrameCount = 0;
+      this.frameIntervalAverage = 1000 / 60;
+      return;
+    }
+    if (this.previousFrameTime > 0) {
+      const interval = Math.min(50, frameTime - this.previousFrameTime);
+      this.frameIntervalAverage += (interval - this.frameIntervalAverage) * 0.08;
+      this.continuousFrameCount += 1;
+    }
+    this.previousFrameTime = frameTime;
+
+    // Step down once after a sustained sub-50-fps interval. A single buffer
+    // reallocation is less disruptive than several small reallocations during
+    // the same journey, while the floor still preserves the scene's detail.
+    if (
+      this.continuousFrameCount >= 48
+      && this.frameIntervalAverage > 20
+      && this.pixelRatio > this.minimumPixelRatio
+    ) {
+      this.pixelRatio = this.minimumPixelRatio;
+      this.renderer.setPixelRatio(this.pixelRatio);
+      this.renderer.domElement.dataset.renderScale = this.pixelRatio.toFixed(2);
+      this.continuousFrameCount = 0;
+      this.frameIntervalAverage = 1000 / 60;
+    }
+  }
+
+  private frame = (frameTime: number): void => {
     this.animationFrame = 0;
-    const delta = Math.min(this.clock.getDelta(), 0.05);
+    if (this.disposed || this.suspended) return;
+    // Visibility resumes reset the clock explicitly, so normal slow frames can
+    // safely retain up to 100 ms instead of silently losing animation time
+    // below 20 fps. Formation updates use the same bounded maximum.
+    const delta = Math.min(this.clock.getDelta(), 0.1);
     this.formation.update(delta, this.speed);
     this.updateConfetti(delta);
     const damping = 1 - Math.exp(-delta * (this.reducedMotion ? 14 : 5.8));
@@ -1606,6 +1678,7 @@ export class RailwayWorld {
       .lerp(this.lookTarget, damping);
     this.camera.lookAt(this.scratchCameraTarget);
     this.renderer.render(this.scene, this.camera);
+    this.adaptRenderScale(frameTime);
     this.camera.getWorldDirection(this.scratchDirection);
     this.scratchDesiredDirection.copy(this.lookTarget).sub(this.camera.position).normalize();
     const cameraMoving = this.camera.position.distanceToSquared(this.desiredCamera) > 0.00001
@@ -1621,6 +1694,22 @@ export class RailwayWorld {
   start(): void {
     if (this.started) return;
     this.started = true;
+    this.clock.start();
+    this.invalidate();
+  }
+
+  setSuspended(suspended: boolean): void {
+    if (this.disposed || this.suspended === suspended) return;
+    this.suspended = suspended;
+    this.previousFrameTime = 0;
+    this.continuousFrameCount = 0;
+    this.frameIntervalAverage = 1000 / 60;
+    if (suspended) {
+      window.cancelAnimationFrame(this.animationFrame);
+      this.animationFrame = 0;
+      this.clock.stop();
+      return;
+    }
     this.clock.start();
     this.invalidate();
   }

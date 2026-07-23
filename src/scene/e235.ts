@@ -1144,8 +1144,10 @@ export function createE235Formation(options: E235Options = {}): E235Formation {
 
   const updateWheelInstances = (): void => {
     cars.forEach((car) => car.updateMatrix());
+    // Every axle shares the same roll angle. Computing its sine/cosine once
+    // avoids repeating quaternion trig for every wheel on every animation frame.
+    rollQuaternion.setFromAxisAngle(wheelRollAxis, wheelAngle);
     wheelRecords.forEach((record, index) => {
-      rollQuaternion.setFromAxisAngle(wheelRollAxis, wheelAngle);
       composedQuaternion.copy(record.baseQuaternion).multiply(rollQuaternion);
       record.object.quaternion.copy(composedQuaternion);
       record.object.updateMatrix();
